@@ -9,6 +9,7 @@ import { gameLens } from "./game.js";
 import { aiLens } from "./ai.js";
 import { securityLens } from "./security.js";
 import { cryptoLens } from "./crypto.js";
+import { universalLens } from "./universal.js";
 
 export const domains: Map<string, DomainLens> = new Map([
   ["finance", financeLens],
@@ -16,6 +17,7 @@ export const domains: Map<string, DomainLens> = new Map([
   ["ai", aiLens],
   ["security", securityLens],
   ["crypto", cryptoLens],
+  ["universal", universalLens],
 ]);
 
 export function getDomain(id: string): DomainLens | undefined {
