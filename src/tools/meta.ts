@@ -186,7 +186,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
         text += `\nUpgrade: https://zeropointlogic.io/pricing\n`;
       }
 
-      text += `\n---\n*Created by Alex Cicic — Zero Point Logic | engine.zeropointlogic.io*\n`;
+      text += `\n---\n*Created by Ciciu Alexandru-Costinel — Zero Point Logic | engine.zeropointlogic.io*\n`;
       text += `*Token tracking estimated from local history. Exact usage at zeropointlogic.io/dashboard*`;
 
       return { content: [{ type: "text" as const, text }] };
@@ -257,7 +257,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
         }
       }
 
-      text += `\n---\n*ZPL Engine MCP v2.1.0 — by Alex Cicic, Zero Point Logic*`;
+      text += `\n---\n*ZPL Engine MCP v2.1.0 — by Ciciu Alexandru-Costinel, Zero Point Logic*`;
 
       return { content: [{ type: "text" as const, text }] };
     }

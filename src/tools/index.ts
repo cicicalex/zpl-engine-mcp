@@ -11,6 +11,7 @@ import { registerSecurityTools } from "./security.js";
 import { registerCryptoTools } from "./crypto.js";
 import { registerUniversalTools } from "./universal.js";
 import { registerMetaTools } from "./meta.js";
+import { registerAdvancedTools } from "./advanced.js";
 
 export function registerAllTools(server: Server, getClient: () => ZPLEngineClient): void {
   registerFinanceTools(server, getClient);   // 7 tools
@@ -20,4 +21,5 @@ export function registerAllTools(server: Server, getClient: () => ZPLEngineClien
   registerCryptoTools(server, getClient);    // 4 tools
   registerUniversalTools(server, getClient); // 4 tools
   registerMetaTools(server, getClient);      // 4 tools (batch, export, usage, account)
+  registerAdvancedTools(server, getClient);  // 8 tools (versus, simulate, certificate, predict, leaderboard, chart, teach, alert)
 }
