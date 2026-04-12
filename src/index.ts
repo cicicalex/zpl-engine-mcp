@@ -32,6 +32,12 @@ import { registerAllTools } from "./tools/index.js";
 
 const API_KEY = process.env.ZPL_API_KEY ?? process.env.ZPL_ENGINE_KEY ?? "";
 const ENGINE_URL = process.env.ZPL_ENGINE_URL ?? "https://engine.zeropointlogic.io";
+const DEFAULT_D = Math.max(3, Math.min(100, Number(process.env.ZPL_DEFAULT_D) || 9));
+const DEFAULT_SAMPLES = Math.max(100, Math.min(50000, Number(process.env.ZPL_DEFAULT_SAMPLES) || 1000));
+const OUTPUT_STYLE = (process.env.ZPL_OUTPUT ?? "detailed") as "detailed" | "compact";
+const LANGUAGE = process.env.ZPL_LANGUAGE ?? "en";
+const BUDGET_WARN = Number(process.env.ZPL_BUDGET_WARN) || 500;
+const SAVE_HISTORY = process.env.ZPL_SAVE_HISTORY !== "false";
 
 function getClient(): ZPLEngineClient {
   if (!API_KEY) {
@@ -48,8 +54,9 @@ function getClient(): ZPLEngineClient {
 // ---------------------------------------------------------------------------
 
 const server = new McpServer({
-  name: "zpl-engine",
-  version: "2.0.0",
+  name: "ZPL Engine MCP",
+  version: "2.1.0",
+  description: "The world's first mathematical neutrality engine. 41 tools across finance, gaming, AI, security, crypto. AIN scoring from 0.1 to 99.9 — not opinions, math.",
 });
 
 // Register all domain-specific tools (31 tools across 7 categories)

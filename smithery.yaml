@@ -1,10 +1,11 @@
-name: zpl-engine
-description: Post-binary stability & neutrality analysis engine. Compute AIN scores across finance, gaming, AI, security, and crypto domains.
+name: ZPL Engine MCP
+description: "The world's first mathematical neutrality engine. 41 tools across finance, gaming, AI, security, crypto. AIN scoring from 0.1 to 99.9 — not opinions, math."
 author: Zero Point Logic
 homepage: https://zeropointlogic.io
-repository: https://github.com/zeropointlogic/zpl-engine-mcp
+repository: https://github.com/zeropointlogic/engine-mcp
 license: MIT
 runtime: node
+icon: https://zeropointlogic.io/icon-512.png
 startCommand:
   type: stdio
   configSchema:
@@ -12,12 +13,46 @@ startCommand:
     properties:
       ZPL_API_KEY:
         type: string
-        description: "Your ZPL Engine API key. Get one at https://zeropointlogic.io/pricing"
-        required: true
+        title: "API Key"
+        description: "Your ZPL Engine API key (zpl_u_...). Get one free at zeropointlogic.io/pricing"
       ZPL_ENGINE_URL:
         type: string
-        description: "Custom engine URL (optional)"
+        title: "Engine URL"
+        description: "Custom engine URL (leave empty for default)"
         default: "https://engine.zeropointlogic.io"
+      ZPL_LANGUAGE:
+        type: string
+        title: "Language"
+        description: "Response language"
+        default: "en"
+        enum: ["en", "ro", "de", "fr", "es"]
+      ZPL_OUTPUT:
+        type: string
+        title: "Output Style"
+        description: "How detailed should responses be?"
+        default: "detailed"
+        enum: ["detailed", "compact"]
+      ZPL_DEFAULT_D:
+        type: number
+        title: "Default Dimension"
+        description: "Default matrix dimension for computations (3-100). Higher = more precise, more tokens."
+        default: 9
+      ZPL_DEFAULT_SAMPLES:
+        type: number
+        title: "Default Samples"
+        description: "Default sample count (100-50000). Higher = more precise."
+        default: 1000
+      ZPL_BUDGET_WARN:
+        type: number
+        title: "Budget Warning"
+        description: "Warn when remaining tokens drop below this number"
+        default: 500
+      ZPL_SAVE_HISTORY:
+        type: string
+        title: "Save History"
+        description: "Save analysis results locally for review/export"
+        default: "true"
+        enum: ["true", "false"]
     required:
       - ZPL_API_KEY
   commandFunction: |-
@@ -26,28 +61,113 @@ startCommand:
       args: ["dist/index.js"],
       env: {
         ZPL_API_KEY: config.ZPL_API_KEY,
-        ZPL_ENGINE_URL: config.ZPL_ENGINE_URL || "https://engine.zeropointlogic.io"
+        ZPL_ENGINE_URL: config.ZPL_ENGINE_URL || "https://engine.zeropointlogic.io",
+        ZPL_LANGUAGE: config.ZPL_LANGUAGE || "en",
+        ZPL_OUTPUT: config.ZPL_OUTPUT || "detailed",
+        ZPL_DEFAULT_D: String(config.ZPL_DEFAULT_D || 9),
+        ZPL_DEFAULT_SAMPLES: String(config.ZPL_DEFAULT_SAMPLES || 1000),
+        ZPL_BUDGET_WARN: String(config.ZPL_BUDGET_WARN || 500),
+        ZPL_SAVE_HISTORY: config.ZPL_SAVE_HISTORY || "true"
       }
     })
 tools:
   - name: zpl_compute
-    description: Raw engine computation with dimension, bias, and samples
-  - name: zpl_analyze
-    description: Domain-aware analysis (finance, game, AI, security, crypto)
+    description: Raw engine computation — dimension, bias, samples → AIN score
   - name: zpl_sweep
-    description: Full 19-step bias sweep for stability sensitivity
-  - name: zpl_domains
-    description: List available domain lenses
+    description: Full 19-step bias sweep across all bias levels
+  - name: zpl_analyze
+    description: Domain-aware analysis (finance, game, AI, security, crypto, universal)
+  - name: zpl_ask
+    description: Answer ANY question with mathematical balance scoring
+  - name: zpl_decide
+    description: Quick 2-option decision with pros/cons → AIN
+  - name: zpl_compare
+    description: Structured comparison of 2 items on multiple criteria
+  - name: zpl_rank
+    description: Rank N options by mathematical balance
+  - name: zpl_explain
+    description: Explain what an AIN score means in any context
+  - name: zpl_market_scan
+    description: Scan multiple market assets simultaneously
+  - name: zpl_portfolio
+    description: Portfolio balance and concentration risk analysis
+  - name: zpl_fear_greed
+    description: Fear & Greed index interpreted through engine
+  - name: zpl_forex_pair
+    description: Forex pair stability and direction signal
+  - name: zpl_sector_bias
+    description: Sector rotation and overweight detection
+  - name: zpl_macro
+    description: Macroeconomic stability analysis
+  - name: zpl_correlation
+    description: Asset correlation and diversification analysis
+  - name: zpl_loot_table
+    description: Game loot table fairness audit
+  - name: zpl_matchmaking
+    description: Matchmaking fairness analysis
+  - name: zpl_economy_check
+    description: Game economy health — inflation, deflation, balance
+  - name: zpl_pvp_balance
+    description: PvP class/weapon balance analysis
+  - name: zpl_gacha_audit
+    description: Gacha/loot box fairness and compliance check
+  - name: zpl_rng_test
+    description: RNG fairness test — is it truly random?
+  - name: zpl_model_bias
+    description: ML model output bias detection
+  - name: zpl_dataset_audit
+    description: Training dataset class balance audit
+  - name: zpl_prompt_test
+    description: AI prompt consistency and bias test
+  - name: zpl_benchmark
+    description: Compare multiple AI models on neutrality
+  - name: zpl_vuln_map
+    description: Vulnerability distribution across components
+  - name: zpl_risk_score
+    description: Risk matrix balance analysis
+  - name: zpl_compliance
+    description: Compliance scoring across standards
+  - name: zpl_whale_check
+    description: Token holder concentration and whale risk
+  - name: zpl_defi_risk
+    description: DeFi protocol risk scoring
+  - name: zpl_liquidity
+    description: Liquidity pool balance analysis
+  - name: zpl_tokenomics
+    description: Token supply distribution fairness
+  - name: zpl_batch
+    description: Run 1-50 computations in one call
+  - name: zpl_export
+    description: Export analysis history as JSON or CSV
+  - name: zpl_usage
+    description: Token usage estimation and budget tracking
   - name: zpl_health
-    description: Engine health check
+    description: Engine health check (no key needed)
   - name: zpl_plans
     description: Show subscription plans and pricing
+  - name: zpl_domains
+    description: List all available domain lenses
+  - name: zpl_history
+    description: View past analysis history
+  - name: zpl_watchlist
+    description: Monitor items and track AIN changes over time
+  - name: zpl_report
+    description: Generate comprehensive multi-computation reports
 tags:
   - finance
   - gaming
-  - ai
+  - game-balance
+  - ai-fairness
+  - bias-detection
   - security
   - crypto
+  - defi
   - stability
   - neutrality
-  - bias-detection
+  - ain
+  - post-binary
+  - risk-analysis
+  - portfolio
+  - matchmaking
+  - loot-table
+  - tokenomics
