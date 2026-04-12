@@ -1,0 +1,53 @@
+name: zpl-engine
+description: Post-binary stability & neutrality analysis engine. Compute AIN scores across finance, gaming, AI, security, and crypto domains.
+author: Zero Point Logic
+homepage: https://zeropointlogic.io
+repository: https://github.com/zeropointlogic/zpl-engine-mcp
+license: MIT
+runtime: node
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      ZPL_API_KEY:
+        type: string
+        description: "Your ZPL Engine API key. Get one at https://zeropointlogic.io/pricing"
+        required: true
+      ZPL_ENGINE_URL:
+        type: string
+        description: "Custom engine URL (optional)"
+        default: "https://engine.zeropointlogic.io"
+    required:
+      - ZPL_API_KEY
+  commandFunction: |-
+    (config) => ({
+      command: "node",
+      args: ["dist/index.js"],
+      env: {
+        ZPL_API_KEY: config.ZPL_API_KEY,
+        ZPL_ENGINE_URL: config.ZPL_ENGINE_URL || "https://engine.zeropointlogic.io"
+      }
+    })
+tools:
+  - name: zpl_compute
+    description: Raw engine computation with dimension, bias, and samples
+  - name: zpl_analyze
+    description: Domain-aware analysis (finance, game, AI, security, crypto)
+  - name: zpl_sweep
+    description: Full 19-step bias sweep for stability sensitivity
+  - name: zpl_domains
+    description: List available domain lenses
+  - name: zpl_health
+    description: Engine health check
+  - name: zpl_plans
+    description: Show subscription plans and pricing
+tags:
+  - finance
+  - gaming
+  - ai
+  - security
+  - crypto
+  - stability
+  - neutrality
+  - bias-detection
