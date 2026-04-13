@@ -625,9 +625,9 @@ async function main() {
   await server.connect(transport);
 }
 
-// Only auto-run when executed directly — skip when Smithery scanner imports the module
-const isScanMode = process.argv[1]?.includes("scan-");
-if (!isScanMode) {
+// Only auto-run when stdin is piped (MCP client connected).
+// Skip when running in terminal (Smithery scan, testing, etc.)
+if (!process.stdin.isTTY) {
   main().catch((err) => {
     console.error("Fatal:", err);
     process.exit(1);
