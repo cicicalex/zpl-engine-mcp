@@ -12,14 +12,16 @@ import { registerCryptoTools } from "./crypto.js";
 import { registerUniversalTools } from "./universal.js";
 import { registerMetaTools } from "./meta.js";
 import { registerAdvancedTools } from "./advanced.js";
+import { registerCertificationTools } from "./certification.js";
 
 export function registerAllTools(server: Server, getClient: () => ZPLEngineClient): void {
-  registerFinanceTools(server, getClient);   // 7 tools
-  registerGamingTools(server, getClient);    // 6 tools
-  registerAIMLTools(server, getClient);      // 4 tools
-  registerSecurityTools(server, getClient);  // 3 tools
-  registerCryptoTools(server, getClient);    // 4 tools
-  registerUniversalTools(server, getClient); // 4 tools
-  registerMetaTools(server, getClient);      // 4 tools (batch, export, usage, account)
-  registerAdvancedTools(server, getClient);  // 8 tools (versus, simulate, certificate, predict, leaderboard, chart, teach, alert)
+  registerFinanceTools(server, getClient);       // 7 tools
+  registerGamingTools(server, getClient);        // 6 tools
+  registerAIMLTools(server, getClient);          // 4 tools
+  registerSecurityTools(server, getClient);      // 3 tools
+  registerCryptoTools(server, getClient);        // 4 tools
+  registerUniversalTools(server, getClient);     // 5 tools (decide, compare, rank, explain, check_response)
+  registerMetaTools(server, getClient);          // 4 tools (batch, export, usage, account)
+  registerAdvancedTools(server, getClient);      // 8 tools (versus, simulate, certificate, predict, leaderboard, chart, teach, alert)
+  registerCertificationTools(server, getClient); // 5 tools (certify, debate, news_bias, review_bias, auto_certify)
 }
