@@ -161,6 +161,71 @@ export function registerUniversalTools(server: Server, getClient: () => ZPLEngin
     }
   );
 
+  // --- zpl_check_response: analyze ANY text for bias ---
+  server.tool(
+    "zpl_check_response",
+    "Check any AI response or text for bias using ZPL Engine. Paste any text and get an AIN neutrality score. Use this to verify how balanced an AI answer is, compare responses, or audit any written content for bias.",
+    {
+      text: z.string().min(10).max(10000).describe("The text to analyze for bias (AI response, article, opinion, etc.)"),
+      context: z.string().optional().describe("What the text is about (e.g. 'pizza vs ciorba comparison', 'political opinion', 'product review')"),
+    },
+    async ({ text, context }) => {
+      try {
+        const client = getClient();
+
+        // Analyze text sentiment balance
+        const positiveWords = (text.match(/\b(good|great|best|excellent|better|love|amazing|perfect|wonderful|superior|prefer|favorite|delicious|beautiful|strong|win|success|benefit|advantage|pro)\b/gi) || []).length;
+        const negativeWords = (text.match(/\b(bad|worst|terrible|poor|worse|hate|awful|horrible|never|inferior|dislike|ugly|weak|fail|loss|problem|disadvantage|con|risk|danger)\b/gi) || []).length;
+        const neutralWords = (text.match(/\b(both|however|although|depends|consider|perspective|subjective|opinion|alternatively|balanced|equally|fair)\b/gi) || []).length;
+
+        const totalSentiment = positiveWords + negativeWords;
+        const sentimentBias = totalSentiment > 0 ? Math.abs(positiveWords - negativeWords) / totalSentiment : 0;
+
+        // Text structure analysis
+        const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+        const avgSentenceLength = sentences.reduce((s, sent) => s + sent.trim().split(/\s+/).length, 0) / Math.max(sentences.length, 1);
+        const structureBias = Math.min(1, Math.abs(avgSentenceLength - 15) / 30); // optimal ~15 words
+
+        // Balance factor (neutral words reduce bias)
+        const balanceFactor = Math.min(1, neutralWords / Math.max(totalSentiment, 1));
+
+        // Combined bias
+        const combinedBias = Math.max(0, Math.min(1, sentimentBias * 0.7 + structureBias * 0.1 - balanceFactor * 0.2));
+
+        // Call ZPL Engine
+        const d = clampD(Math.max(5, Math.min(15, Math.floor(sentences.length / 2))));
+        const result = await client.compute({ d, bias: Math.round(combinedBias * 100) / 100, samples: 1000 });
+
+        const ain = Math.round(result.ain * 100);
+
+        let output = `## ZPL Bias Check — AIN ${ain}/100 (${ainSignal(ain)})\n\n`;
+        if (context) output += `**Context:** ${context}\n\n`;
+        output += `| Metric | Value |\n|--------|-------|\n`;
+        output += `| AIN Score | ${ain}/100 |\n`;
+        output += `| Status | ${result.ain_status} |\n`;
+        output += `| Positive words | ${positiveWords} |\n`;
+        output += `| Negative words | ${negativeWords} |\n`;
+        output += `| Neutral/balanced words | ${neutralWords} |\n`;
+        output += `| Sentiment bias | ${(sentimentBias * 100).toFixed(1)}% |\n`;
+        output += `| Sentences | ${sentences.length} |\n`;
+        output += `| Tokens used | ${result.tokens_used} |\n`;
+
+        output += `\n### Interpretation\n`;
+        if (ain >= 80) output += `This response is **highly balanced**. It presents multiple perspectives without strongly favoring one side.\n`;
+        else if (ain >= 60) output += `This response is **moderately balanced**. It has a slight lean but generally fair.\n`;
+        else if (ain >= 40) output += `This response shows **noticeable bias**. It favors one perspective over others.\n`;
+        else output += `This response is **heavily biased**. It strongly pushes one viewpoint.\n`;
+
+        output += `\n*Analyzed by ZPL Engine v3 — 8N+3 theorem*`;
+
+        addHistory({ tool: "zpl_check_response", results: { context: context ?? "text analysis", sentences: sentences.length }, ain_scores: { response: ain } });
+        return { content: [{ type: "text" as const, text: output }] };
+      } catch (err) {
+        return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
+      }
+    }
+  );
+
   // --- zpl_explain: explain AIN for any context ---
   server.tool(
     "zpl_explain",
