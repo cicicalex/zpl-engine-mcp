@@ -39,7 +39,7 @@
   "homepage": "https://zeropointlogic.io",
   "repository": {
     "type": "git",
-    "url": "https://github.com/zeropointlogic/engine-mcp"
+    "url": "https://git.zeropointlogic.io/cicicalex/engine-mcp"
   },
   "files": [
     "dist/",
