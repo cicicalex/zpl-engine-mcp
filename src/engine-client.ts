@@ -83,6 +83,7 @@ export class ZPLEngineClient {
         bias: req.bias,
         samples: req.samples ?? 1000,
       }),
+      signal: AbortSignal.timeout(15000), // 15s timeout
     });
 
     if (!res.ok) {
@@ -99,6 +100,7 @@ export class ZPLEngineClient {
 
     const res = await fetch(`${this.baseUrl}/sweep?${params}`, {
       headers: this.headers(),
+      signal: AbortSignal.timeout(30000), // 30s timeout for sweep
     });
 
     if (!res.ok) {
@@ -110,7 +112,7 @@ export class ZPLEngineClient {
   }
 
   async health(): Promise<HealthResponse> {
-    const res = await fetch(`${this.baseUrl}/health`);
+    const res = await fetch(`${this.baseUrl}/health`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) throw new Error(`Engine unreachable: ${res.status}`);
     return res.json() as Promise<HealthResponse>;
   }
