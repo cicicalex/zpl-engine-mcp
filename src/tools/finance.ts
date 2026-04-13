@@ -16,10 +16,10 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
     "Scan multiple assets simultaneously. Provide price changes for 2-50 assets, get AIN stability score for each plus an overall market AIN. Great for daily market overview.",
     {
       assets: z.array(z.object({
-        symbol: z.string().describe("Asset symbol (e.g. BTC, AAPL, EUR/USD)"),
+        symbol: z.string().max(20).describe("Asset symbol (e.g. BTC, AAPL, EUR/USD)"),
         change: z.number().describe("Price change % (e.g. -3.2, +5.1)"),
       })).min(2).max(50).describe("Assets to scan"),
-      market: z.string().optional().describe("Market name for label (e.g. 'crypto', 'S&P 500', 'forex')"),
+      market: z.string().max(100).optional().describe("Market name for label (e.g. 'crypto', 'S&P 500', 'forex')"),
     },
     async ({ assets, market }) => {
       try {
@@ -54,7 +54,7 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
     "Analyze portfolio balance. Provide asset allocations (weights/percentages) and optionally their returns. Returns AIN showing how balanced or concentrated the portfolio is.",
     {
       allocations: z.array(z.object({
-        asset: z.string().describe("Asset name"),
+        asset: z.string().max(100).describe("Asset name"),
         weight: z.number().min(0).describe("Portfolio weight % (e.g. 40 for 40%)"),
         return_pct: z.number().optional().describe("Optional: asset return %"),
       })).min(2).max(50).describe("Portfolio allocations"),
@@ -151,7 +151,7 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
     "zpl_forex_pair",
     "Analyze forex pair stability. Provide bid, ask, spread, and recent changes to get AIN stability score and direction signal.",
     {
-      pair: z.string().describe("Currency pair (e.g. EUR/USD)"),
+      pair: z.string().max(20).describe("Currency pair (e.g. EUR/USD)"),
       changes: z.array(z.number()).min(3).max(30).describe("Recent price changes % (e.g. hourly, daily). More data = more accurate."),
       spread_pips: z.number().optional().describe("Current spread in pips"),
     },
@@ -186,7 +186,7 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
     "Analyze sector bias/rotation. Provide sector performance data to detect which sectors are overweight and whether the market is balanced across sectors.",
     {
       sectors: z.array(z.object({
-        name: z.string().describe("Sector name"),
+        name: z.string().max(100).describe("Sector name"),
         change: z.number().describe("Sector change %"),
         weight: z.number().optional().describe("Optional: sector weight in index %"),
       })).min(3).max(30).describe("Sector data"),
@@ -224,11 +224,11 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
     "Analyze macroeconomic stability. Provide key economic indicators (GDP growth, inflation, unemployment, interest rates, etc.) to get a mathematical stability assessment.",
     {
       indicators: z.array(z.object({
-        name: z.string().describe("Indicator name (e.g. GDP Growth, Inflation, Unemployment)"),
+        name: z.string().max(100).describe("Indicator name (e.g. GDP Growth, Inflation, Unemployment)"),
         value: z.number().describe("Current value"),
         target: z.number().optional().describe("Target/ideal value (e.g. 2% inflation target)"),
       })).min(3).max(20).describe("Economic indicators"),
-      country: z.string().optional().describe("Country name"),
+      country: z.string().max(100).optional().describe("Country name"),
     },
     async ({ indicators, country }) => {
       try {
@@ -275,8 +275,8 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
     "Analyze correlation between assets. Provide parallel time series of returns/changes for 2+ assets. Detects whether assets move together (high correlation = concentration risk).",
     {
       assets: z.array(z.object({
-        name: z.string(),
-        returns: z.array(z.number()).min(3).describe("Return series (same length for all assets)"),
+        name: z.string().max(200),
+        returns: z.array(z.number()).min(3).max(500).describe("Return series (same length for all assets, max 500 points)"),
       })).min(2).max(20).describe("Assets with return series"),
     },
     async ({ assets }) => {

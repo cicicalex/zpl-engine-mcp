@@ -2,17 +2,21 @@
 
 Model Context Protocol (MCP) server for the **Zero Point Logic Engine** — a post-binary stability and neutrality analysis system.
 
-Connects any MCP-compatible AI client (Claude Code, Cursor, Windsurf, etc.) to the ZPL Engine API for real-time bias detection, stability scoring, and neutrality analysis across multiple domains.
+Connects any MCP-compatible AI client (Claude Desktop, Claude Code, Cursor, Windsurf, etc.) to the ZPL Engine API for real-time bias detection, stability scoring, and neutrality analysis across multiple domains.
+
+**56 tools** across 9 categories: Finance, Gaming, AI/ML, Security, Crypto, Certification, Advanced, Universal, and Meta.
 
 ## What is ZPL Engine?
 
 The ZPL Engine computes the **AIN (AI Neutrality Index)** — a mathematical measure of how stable or biased a system is. It works across:
 
-- **Finance** — market stability, portfolio bias, risk concentration
-- **Gaming** — economy balance, loot fairness, power distribution
-- **AI/ML** — model fairness, prediction bias, dataset balance
-- **Security** — vulnerability distribution, attack surface analysis
-- **Crypto** — token decentralization, validator concentration, network health
+- **Finance** — market stability, portfolio bias, risk concentration, forex pairs, fear & greed
+- **Gaming** — economy balance, loot fairness, matchmaking, gacha audit, PvP balance
+- **AI/ML** — model fairness, prediction bias, dataset balance, prompt testing, benchmarks
+- **Security** — vulnerability distribution, risk matrix, compliance scoring
+- **Crypto** — whale concentration, DeFi risk, liquidity analysis, tokenomics
+- **Certification** — bias certify any text, debate balance, news bias, review authenticity
+- **Universal** — quick decisions, structured comparison, AIN ranking, response bias check
 
 One engine, multiple domains. The engine doesn't know what your data represents — domain "lenses" translate your specific data into the universal mathematical framework.
 
@@ -20,33 +24,39 @@ One engine, multiple domains. The engine doesn't know what your data represents 
 
 ### 1. Get an API Key
 
-Visit [zeropointlogic.io/pricing](https://zeropointlogic.io/pricing) to create an account and get your API key.
+1. Create account: [zeropointlogic.io/auth/register](https://zeropointlogic.io/auth/register)
+2. Choose a plan: [zeropointlogic.io/pricing](https://zeropointlogic.io/pricing)
+3. Generate API key: [zeropointlogic.io/dashboard/api-keys](https://zeropointlogic.io/dashboard/api-keys)
+
+Your key starts with `zpl_u_` and is shown **once** — save it immediately.
 
 ### 2. Install
+
+**Via npm (recommended):**
 
 ```bash
 npm install @zeropointlogic/engine-mcp
 ```
 
-Or clone and build:
+**Or clone and build:**
 
 ```bash
-git clone https://github.com/zeropointlogic/zpl-engine-mcp.git
-cd zpl-engine-mcp
+git clone https://github.com/zeropointlogic/engine-mcp.git
+cd engine-mcp
 npm install
 npm run build
 ```
 
 ### 3. Configure MCP Client
 
-#### Claude Code (claude_desktop_config.json)
+#### Claude Desktop (claude_desktop_config.json)
 
 ```json
 {
   "mcpServers": {
     "zpl-engine": {
-      "command": "node",
-      "args": ["C:/Proiecte/zpl-engine-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@zeropointlogic/engine-mcp"],
       "env": {
         "ZPL_API_KEY": "zpl_u_YOUR_KEY_HERE"
       }
@@ -61,8 +71,24 @@ npm run build
 {
   "mcpServers": {
     "zpl-engine": {
+      "command": "npx",
+      "args": ["-y", "@zeropointlogic/engine-mcp"],
+      "env": {
+        "ZPL_API_KEY": "zpl_u_YOUR_KEY_HERE"
+      }
+    }
+  }
+}
+```
+
+#### Local build (alternative)
+
+```json
+{
+  "mcpServers": {
+    "zpl-engine": {
       "command": "node",
-      "args": ["C:/Proiecte/zpl-engine-mcp/dist/index.js"],
+      "args": ["/path/to/engine-mcp/dist/index.js"],
       "env": {
         "ZPL_API_KEY": "zpl_u_YOUR_KEY_HERE"
       }
@@ -75,105 +101,121 @@ npm run build
 
 Add to your MCP configuration following the respective IDE's documentation, with the same command/args/env structure.
 
-## Available Tools
+## Tool Categories (56 tools)
 
-### `zpl_compute`
-Raw engine computation. Provide dimension (d), bias (0-1), and samples directly.
+| Category | Tools | Examples |
+|----------|-------|---------|
+| **Core** | 7 | `zpl_compute`, `zpl_analyze`, `zpl_sweep`, `zpl_ask`, `zpl_domains`, `zpl_health`, `zpl_plans` |
+| **Finance** | 8 | `zpl_portfolio`, `zpl_risk_score`, `zpl_market_scan`, `zpl_forex_pair`, `zpl_fear_greed`, `zpl_sector_bias`, `zpl_macro`, `zpl_correlation` |
+| **Gaming** | 6 | `zpl_economy_check`, `zpl_loot_table`, `zpl_matchmaking`, `zpl_gacha_audit`, `zpl_pvp_balance`, `zpl_leaderboard` |
+| **AI/ML** | 4 | `zpl_model_bias`, `zpl_dataset_audit`, `zpl_prompt_test`, `zpl_benchmark` |
+| **Security** | 3 | `zpl_vuln_map`, `zpl_risk_score`, `zpl_compliance` |
+| **Crypto** | 4 | `zpl_whale_check`, `zpl_defi_risk`, `zpl_liquidity`, `zpl_tokenomics` |
+| **Certification** | 6 | `zpl_certify`, `zpl_debate`, `zpl_news_bias`, `zpl_review_bias`, `zpl_auto_certify`, `zpl_check_response` |
+| **Advanced** | 10 | `zpl_simulate`, `zpl_predict`, `zpl_versus`, `zpl_chart`, `zpl_alert`, `zpl_watchlist`, `zpl_certificate`, `zpl_report`, `zpl_teach`, `zpl_rng_test` |
+| **Universal** | 4 | `zpl_decide`, `zpl_compare`, `zpl_rank`, `zpl_explain` |
+| **Meta** | 4 | `zpl_batch`, `zpl_export`, `zpl_usage`, `zpl_account` |
 
-```
-> Use zpl_compute with d=9, bias=0.3, samples=1000
-```
-
-### `zpl_analyze`
-Smart domain-aware analysis. Provide a domain and your data — the lens handles the rest.
-
-```
-> Use zpl_analyze with domain="finance" and input={"assets": [-3.2, 8.5, -1.1, 0.4, 2.1], "context": "crypto"}
-```
-
-```
-> Use zpl_analyze with domain="game" and input={"values": [5, 15, 30, 30, 15, 5], "game_type": "rpg"}
-```
+### Quick Examples
 
 ```
-> Use zpl_analyze with domain="ai" and input={"outputs": [0.85, 0.12, 0.03], "model_type": "classifier"}
+> Analyze my crypto portfolio for bias: BTC 40%, ETH 25%, SOL 15%, AVAX 10%, DOT 10%
+
+> Check if this loot table is fair: Common 60%, Uncommon 25%, Rare 10%, Legendary 5%
+
+> Is my ML model biased? Class A: 1200 predictions, Class B: 300 predictions
+
+> Certify this AI response for neutrality bias
+
+> Compare React vs Vue across 5 criteria
 ```
 
-### `zpl_sweep`
-Full 19-step bias sweep for a dimension. Shows how stability changes across all bias levels.
+## Pricing Plans
 
-```
-> Use zpl_sweep with d=16
-```
+All paid plans offer **20% discount with annual billing**.
 
-### `zpl_domains`
-Lists all available domain lenses with input schemas and examples.
-
-### `zpl_health`
-Engine health check (no API key needed).
-
-### `zpl_plans`
-Show all subscription plans with pricing and limits.
-
-## Domain Lenses
-
-| Domain | Input | What It Analyzes |
-|--------|-------|------------------|
-| `finance` | Price changes, volatility | Market stability, portfolio bias |
-| `game` | Drop rates, power levels | Economy balance, fairness |
-| `ai` | Model outputs, distributions | Prediction bias, dataset balance |
-| `security` | CVSS scores, risk ratings | Vulnerability concentration |
-| `crypto` | Holder %, validator weights | Decentralization, concentration |
-
-### Adding Custom Domains
-
-Create a new file in `src/domains/` implementing the `DomainLens` interface, then register it in `src/domains/index.ts`. The engine API is domain-agnostic — your lens just needs to convert domain data into `(d, bias, samples)` and interpret the result.
+| Plan | Monthly | Annual | Max D | Tokens/mo | Keys |
+|------|---------|--------|-------|-----------|------|
+| Free | $0 | — | d=9 | 5,000 | 1 |
+| Basic | $10/mo | $8/mo | d=16 | 10,000 | 1 |
+| Pro | $29/mo | $23/mo | d=25 | 50,000 | 3 |
+| GamePro | $69/mo | $55/mo | d=32 | 150,000 | 5 |
+| Studio | $149/mo | $119/mo | d=48 | 500,000 | 10 |
+| Agent | $199/mo | $159/mo | d=48 | 2,000,000 | 15 |
+| Enterprise | $499/mo | $399/mo | d=64 | 10,000,000 | 25 |
+| Enterprise XL | $999/mo | $799/mo | d=100 | 50,000,000 | 50 |
 
 ## Token Cost
 
-Each computation costs `d² + d` tokens. Example costs:
+Token cost depends on the dimension tier:
 
-| Dimension | Single Compute | Full Sweep (19x) |
-|-----------|---------------|------------------|
-| d=3 | 12 tokens | 228 tokens |
-| d=9 | 90 tokens | 1,710 tokens |
-| d=16 | 272 tokens | 5,168 tokens |
-| d=25 | 650 tokens | 12,350 tokens |
+| Dimension | Tokens/call | Sweep (19x) | Free plan (5K) |
+|-----------|-------------|-------------|----------------|
+| D3–D5 | 1 | 19 | 5,000 calls |
+| D6–D9 | 2 | 38 | 2,500 calls |
+| D10–D16 | 5 | 95 | 1,000 calls |
+| D17–D25 | 15 | 285 | — |
+| D26–D32 | 40 | 760 | — |
+| D33–D48 | 150 | 2,850 | — |
+| D49–D64 | 500 | 9,500 | — |
+| D65+ | 2,000 | 38,000 | — |
+
+## API Key Management
+
+- Keys are generated at [zeropointlogic.io/dashboard/api-keys](https://zeropointlogic.io/dashboard/api-keys)
+- Format: `zpl_u_` + 48 hex characters (user keys) or `zpl_s_` + 48 hex (service keys)
+- Keys are SHA-256 hashed server-side — the plaintext is shown **once** at creation
+- **To rotate a key:** create a new key, update your MCP config, restart Claude, then delete the old key
+- If a key is compromised, delete it immediately from the dashboard — it's invalidated instantly
 
 ## Architecture
 
 ```
 Your AI Client (Claude, Cursor, etc.)
-    │
-    ▼ (MCP Protocol — stdio)
-ZPL Engine MCP Server
-    │
-    ├── Domain Lenses (data → engine params)
-    │   ├── finance.ts
-    │   ├── game.ts
-    │   ├── ai.ts
-    │   ├── security.ts
-    │   └── crypto.ts
-    │
-    ▼ (HTTPS — Bearer auth)
+    |
+    v (MCP Protocol — stdio)
+ZPL Engine MCP Server (this package)
+    |
+    +-- Tool modules (data -> engine params)
+    |   +-- finance, gaming, ai-ml, security, crypto
+    |   +-- certification, advanced, universal, meta
+    |
+    v (HTTPS — Bearer auth)
 ZPL Engine API (engine.zeropointlogic.io)
-    │
-    ▼ (Post-binary computation — trade secret)
-    AIN Result
+    |
+    v (Post-binary computation)
+    AIN Result (0.1-99.9)
 ```
 
 The MCP server **never** sees or contains the engine formula. It sends `(d, bias, samples)` and receives `(ain, deviation, status)`. All computation happens server-side.
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `ZPL_API_KEY` | Yes | Your ZPL Engine API key (zpl_u_...) |
-| `ZPL_ENGINE_URL` | No | Custom engine URL (default: https://engine.zeropointlogic.io) |
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `ZPL_API_KEY` | **Yes** | — | Your API key (`zpl_u_...` or `zpl_s_...`) |
+| `ZPL_ENGINE_URL` | No | `https://engine.zeropointlogic.io` | Custom engine URL |
+| `ZPL_RATE_LIMIT` | No | `60` | Max requests per minute |
+| `ZPL_BUDGET_WARN` | No | `500` | Token budget warning threshold |
+| `ZPL_MAX_RETRIES` | No | `2` | Retry count for transient failures |
+| `ZPL_STORE_PATH` | No | `~/.zpl-engine/` | Local history storage path |
+
+## Security
+
+- All inputs validated via Zod schemas with strict maxLength limits
+- API keys never logged or stored in plaintext locally
+- In-memory rate limiting (configurable)
+- Exponential backoff retry for transient engine failures (5xx only, not 4xx)
+- Fail-fast startup if `ZPL_API_KEY` is not set
+- Local history sanitizes API key prefixes before writing
 
 ## License
 
 MIT
+
+## Author
+
+**Ciciu Alexandru-Costinel** — [Zero Point Logic](https://zeropointlogic.io)
 
 ## Links
 
@@ -181,3 +223,4 @@ MIT
 - [Finance Monitor](https://finance.zeropointlogic.io) — Live financial analysis
 - [API Documentation](https://zeropointlogic.io/docs) — Full API reference
 - [Pricing](https://zeropointlogic.io/pricing) — Plans & API keys
+- [Smithery Registry](https://smithery.ai) — MCP discovery

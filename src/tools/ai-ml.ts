@@ -16,11 +16,11 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
     "Analyze ML model output bias. Provide prediction distributions, confidence scores, or class outputs. Detects whether the model favors certain predictions over others.",
     {
       predictions: z.array(z.object({
-        class_name: z.string().describe("Class/category name"),
+        class_name: z.string().max(100).describe("Class/category name"),
         count: z.number().min(0).describe("Number of predictions in this class"),
         avg_confidence: z.number().min(0).max(1).optional().describe("Average confidence for this class"),
       })).min(2).max(50).describe("Prediction distribution across classes"),
-      model_name: z.string().optional().describe("Model name for label"),
+      model_name: z.string().max(200).optional().describe("Model name for label"),
       threshold: z.number().optional().describe("Decision threshold (default 0.5)"),
     },
     async ({ predictions, model_name, threshold }) => {
@@ -64,10 +64,10 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
     "Audit training dataset for class imbalance. Provide sample counts per class/category. Detects whether the dataset will cause model bias during training.",
     {
       classes: z.array(z.object({
-        name: z.string(),
+        name: z.string().max(100),
         samples: z.number().int().min(0),
       })).min(2).max(100).describe("Dataset classes with sample counts"),
-      dataset_name: z.string().optional(),
+      dataset_name: z.string().max(200).optional(),
     },
     async ({ classes, dataset_name }) => {
       try {
@@ -110,11 +110,11 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
     "Test AI prompt for consistency and bias. Run the same prompt multiple times and provide the distribution of response types/sentiments. Detects if the model gives biased or inconsistent answers.",
     {
       responses: z.array(z.object({
-        category: z.string().describe("Response category (e.g. 'positive', 'negative', 'neutral' or 'option A', 'option B')"),
+        category: z.string().max(100).describe("Response category (e.g. 'positive', 'negative', 'neutral' or 'option A', 'option B')"),
         count: z.number().int().min(0).describe("How many times this response was given"),
       })).min(2).max(20).describe("Response distribution across categories"),
       total_runs: z.number().int().min(2).describe("Total number of prompt runs"),
-      prompt_description: z.string().optional().describe("What the prompt asked"),
+      prompt_description: z.string().max(500).optional().describe("What the prompt asked"),
     },
     async ({ responses, total_runs, prompt_description }) => {
       try {
@@ -152,10 +152,10 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
     "Compare multiple AI models on neutrality/fairness. Provide performance metrics for each model. Returns which model is most balanced across all metrics.",
     {
       models: z.array(z.object({
-        name: z.string().describe("Model name"),
-        scores: z.array(z.number()).describe("Performance scores across metrics (same metrics for all)"),
+        name: z.string().max(200).describe("Model name"),
+        scores: z.array(z.number()).min(2).max(50).describe("Performance scores across metrics (same metrics for all)"),
       })).min(2).max(10).describe("Models to compare"),
-      metrics: z.array(z.string()).describe("Metric names (same order as scores)"),
+      metrics: z.array(z.string().max(100)).min(2).max(50).describe("Metric names (same order as scores)"),
     },
     async ({ models, metrics }) => {
       try {

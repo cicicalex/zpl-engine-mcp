@@ -19,12 +19,12 @@ export function registerAdvancedTools(server: Server, getClient: () => ZPLEngine
 Example: "BTC vs ETH vs SOL" with market cap, volume, price change → instant AIN ranking.
 Example: "React vs Vue vs Svelte" with performance, ecosystem, learning curve → balanced winner.`,
     {
-      title: z.string().describe("Comparison title (e.g. 'Top 3 Cryptos Q2 2026')"),
+      title: z.string().max(200).describe("Comparison title (e.g. 'Top 3 Cryptos Q2 2026')"),
       items: z.array(z.object({
-        name: z.string(),
+        name: z.string().max(200),
         metrics: z.array(z.number().min(0).max(100)).min(3).describe("Metric scores 0-100 (normalized)"),
       })).min(2).max(10).describe("Items to compare with normalized metrics"),
-      metric_names: z.array(z.string()).min(3).describe("Names of the metrics"),
+      metric_names: z.array(z.string().max(100)).min(3).describe("Names of the metrics"),
     },
     async ({ title, items, metric_names }) => {
       try {
@@ -91,10 +91,10 @@ Example: "React vs Vue vs Svelte" with performance, ecosystem, learning curve �
 
 Powerful for risk planning, game balancing, portfolio stress testing.`,
     {
-      scenario: z.string().describe("Describe the scenario (e.g. 'BTC crashes 20%')"),
+      scenario: z.string().max(500).describe("Describe the scenario (e.g. 'BTC crashes 20%')"),
       baseline: z.array(z.number()).min(3).max(50).describe("Current state values"),
       modified: z.array(z.number()).min(3).max(50).describe("Modified state values (same length as baseline)"),
-      labels: z.array(z.string()).optional().describe("Labels for each value"),
+      labels: z.array(z.string().max(100)).optional().describe("Labels for each value"),
     },
     async ({ scenario, baseline, modified, labels }) => {
       try {
@@ -162,10 +162,10 @@ Powerful for risk planning, game balancing, portfolio stress testing.`,
 Grades: A+ (90-99.9), A (80-89), B (60-79), C (40-59), D (20-39), F (0-19)
 Use this to certify game balance, AI fairness, token distribution, or any system's neutrality.`,
     {
-      subject: z.string().describe("What is being certified (e.g. 'Legends of Aria — Loot System')"),
-      category: z.string().describe("Category: 'game-balance', 'ai-fairness', 'token-distribution', 'market-stability', 'security-posture', 'custom'"),
+      subject: z.string().max(200).describe("What is being certified (e.g. 'Legends of Aria — Loot System')"),
+      category: z.string().max(50).describe("Category: 'game-balance', 'ai-fairness', 'token-distribution', 'market-stability', 'security-posture', 'custom'"),
       values: z.array(z.number()).min(3).max(50).describe("The data to certify (distribution values, scores, metrics)"),
-      certified_by: z.string().optional().describe("Organization requesting certification"),
+      certified_by: z.string().max(200).optional().describe("Organization requesting certification"),
     },
     async ({ subject, category, values, certified_by }) => {
       try {
@@ -241,7 +241,7 @@ Use this to certify game balance, AI fairness, token distribution, or any system
 Not a price predictor — predicts STABILITY trajectory.`,
     {
       series: z.array(z.number()).min(3).max(100).describe("Time series data points (chronological order)"),
-      label: z.string().optional().describe("What this data represents"),
+      label: z.string().max(200).optional().describe("What this data represents"),
       window: z.number().int().min(2).max(20).optional().default(3).describe("Analysis window size"),
     },
     async ({ series, label, window }) => {
@@ -365,7 +365,7 @@ Not a price predictor — predicts STABILITY trajectory.`,
     "zpl_chart",
     "Generate an ASCII chart showing AIN scores over time from your analysis history. Visual stability tracking directly in the terminal.",
     {
-      filter_tool: z.string().optional().describe("Filter by tool name (e.g. 'zpl_compute', 'zpl_ask')"),
+      filter_tool: z.string().max(50).optional().describe("Filter by tool name (e.g. 'zpl_compute', 'zpl_ask')"),
       height: z.number().int().min(5).max(20).optional().default(10).describe("Chart height in rows"),
     },
     async ({ filter_tool, height }) => {
@@ -542,11 +542,13 @@ Created by Ciciu Alexandru-Costinel — published on Zenodo with DOI.`,
 | 20-39 | D | WEAK — Significant bias, action needed |
 | 0.1-19 | F | CRITICAL — Extreme bias, system is broken |
 
-**Token cost:** d² + d tokens per computation
-- d=3: 12 tokens
-- d=9: 90 tokens
-- d=16: 272 tokens
-- d=25: 650 tokens
+**Token cost (tiered by dimension):**
+- d=3–5: 1 token
+- d=6–9: 2 tokens
+- d=10–16: 5 tokens
+- d=17–25: 15 tokens
+- d=26–32: 40 tokens
+- d=33–48: 150 tokens
 
 **Sweep:** 19× the single compute cost (tests all bias levels)`,
 

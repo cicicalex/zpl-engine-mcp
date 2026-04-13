@@ -61,7 +61,8 @@ export function directionalBias(values: number[]): number {
 
 /** Compute bias from variance of normalized scores */
 export function varianceBias(scores: number[], scaleMax = 10): number {
-  const norm = scores.map((s) => Math.min(1, Math.max(0, s / scaleMax)));
+  const safeScale = Math.max(scaleMax || 10, 1);
+  const norm = scores.map((s) => Math.min(1, Math.max(0, s / safeScale)));
   const mean = norm.reduce((s, v) => s + v, 0) / norm.length;
   const variance = norm.reduce((s, v) => s + (v - mean) ** 2, 0) / norm.length;
   const severity = mean;

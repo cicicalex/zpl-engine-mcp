@@ -16,10 +16,10 @@ export function registerCryptoTools(server: Server, getClient: () => ZPLEngineCl
     "Check token holder concentration (whale risk). Provide top holder percentages. Returns decentralization AIN score — low score means whales dominate.",
     {
       holders: z.array(z.object({
-        label: z.string().optional().describe("Holder label (e.g. 'Top 1', 'Binance', 'Unknown wallet')"),
+        label: z.string().max(100).optional().describe("Holder label (e.g. 'Top 1', 'Binance', 'Unknown wallet')"),
         percentage: z.number().min(0).max(100).describe("% of total supply held"),
       })).min(2).max(50).describe("Top holders with supply %"),
-      token: z.string().optional().describe("Token name"),
+      token: z.string().max(100).optional().describe("Token name"),
       total_holders: z.number().optional().describe("Total number of holders (for context)"),
     },
     async ({ holders, token, total_holders }) => {
@@ -59,9 +59,9 @@ export function registerCryptoTools(server: Server, getClient: () => ZPLEngineCl
     "zpl_defi_risk",
     "Analyze DeFi protocol risk by scoring multiple risk factors. Covers smart contract, economic, governance, and oracle risks.",
     {
-      protocol: z.string().describe("Protocol name"),
+      protocol: z.string().max(200).describe("Protocol name"),
       factors: z.array(z.object({
-        name: z.string().describe("Risk factor (e.g. 'Smart Contract', 'Oracle', 'Governance', 'Liquidity')"),
+        name: z.string().max(100).describe("Risk factor (e.g. 'Smart Contract', 'Oracle', 'Governance', 'Liquidity')"),
         score: z.number().min(0).max(10).describe("Risk level 0 (safe) to 10 (dangerous)"),
       })).min(3).max(15).describe("Risk factors"),
       tvl: z.number().optional().describe("Optional: Total Value Locked in $"),
@@ -102,7 +102,7 @@ export function registerCryptoTools(server: Server, getClient: () => ZPLEngineCl
     "Analyze liquidity pool balance. Provide pool token amounts/values. Checks if the pool is balanced or if impermanent loss risk is high.",
     {
       pools: z.array(z.object({
-        name: z.string().describe("Pool name (e.g. 'ETH/USDC')"),
+        name: z.string().max(100).describe("Pool name (e.g. 'ETH/USDC')"),
         token_a_value: z.number().describe("Value of token A in pool ($)"),
         token_b_value: z.number().describe("Value of token B in pool ($)"),
       })).min(1).max(20).describe("Liquidity pools"),
@@ -152,7 +152,7 @@ export function registerCryptoTools(server: Server, getClient: () => ZPLEngineCl
     "Analyze tokenomics fairness. Provide token allocation breakdown (team, investors, community, treasury, etc.). Checks if distribution is fair or insider-heavy.",
     {
       allocations: z.array(z.object({
-        category: z.string().describe("Allocation category (Team, Investors, Community, Treasury, etc.)"),
+        category: z.string().max(100).describe("Allocation category (Team, Investors, Community, Treasury, etc.)"),
         percentage: z.number().min(0).max(100).describe("% of total supply"),
         vesting_months: z.number().optional().describe("Vesting period in months (0 = fully unlocked)"),
       })).min(2).max(15).describe("Token allocation breakdown"),

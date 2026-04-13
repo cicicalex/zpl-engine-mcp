@@ -56,7 +56,7 @@ export function registerCertificationTools(server: Server, getClient: () => ZPLE
     "zpl_certify",
     "Certify any text for bias using ZPL Engine. MUST be called after EVERY AI response when auto_certify is enabled. Returns AIN score (0.00-100.00) as a badge. Higher dimension = more precise analysis = more tokens. Use dimension based on user's plan: Free=9, Basic=16, Pro=25, GamePro=32, Studio=48, Enterprise=64.",
     {
-      text: z.string().min(5).max(10000).describe("Text to certify (paste the AI response)"),
+      text: z.string().min(5).max(10000).describe("Text to certify — paste the AI response or any content"),
       dimension: z.number().min(3).max(100).optional().describe("Analysis dimension (default 9). Higher = more precise but costs more tokens. Match to plan: Free=9, Basic=16, Pro=25"),
     },
     async ({ text, dimension }) => {
@@ -105,11 +105,11 @@ export function registerCertificationTools(server: Server, getClient: () => ZPLE
     "zpl_debate",
     "Generate a balanced debate on any topic. Give a topic and two sides — ZPL ensures both arguments are equally weighted and scores the overall balance.",
     {
-      topic: z.string().describe("The debate topic (e.g. 'remote work vs office')"),
-      side_a: z.string().describe("First position name"),
-      side_b: z.string().describe("Second position name"),
-      args_a: z.array(z.string()).min(2).max(10).describe("Arguments for side A"),
-      args_b: z.array(z.string()).min(2).max(10).describe("Arguments for side B"),
+      topic: z.string().max(300).describe("The debate topic (e.g. 'remote work vs office')"),
+      side_a: z.string().max(200).describe("First position name"),
+      side_b: z.string().max(200).describe("Second position name"),
+      args_a: z.array(z.string().max(500)).min(2).max(10).describe("Arguments for side A"),
+      args_b: z.array(z.string().max(500)).min(2).max(10).describe("Arguments for side B"),
     },
     async ({ topic, side_a, side_b, args_a, args_b }) => {
       try {
@@ -154,9 +154,9 @@ export function registerCertificationTools(server: Server, getClient: () => ZPLE
     "zpl_news_bias",
     "Score a news article or blog post for editorial bias. Paste the text and get an AIN neutrality score. Detects if the article favors one perspective over another.",
     {
-      title: z.string().describe("Article title"),
+      title: z.string().max(300).describe("Article title"),
       text: z.string().min(50).max(20000).describe("Article text to analyze"),
-      claimed_stance: z.string().optional().describe("What stance the article claims (e.g. 'neutral', 'opinion', 'editorial')"),
+      claimed_stance: z.string().max(50).optional().describe("What stance the article claims (e.g. 'neutral', 'opinion', 'editorial')"),
     },
     async ({ title, text, claimed_stance }) => {
       try {
@@ -201,7 +201,7 @@ export function registerCertificationTools(server: Server, getClient: () => ZPLE
     "zpl_review_bias",
     "Analyze a product or service review for bias. Detects if a review is genuinely balanced or suspiciously one-sided (potential fake review).",
     {
-      product: z.string().describe("Product/service being reviewed"),
+      product: z.string().max(200).describe("Product/service being reviewed"),
       review_text: z.string().min(20).max(5000).describe("The review text"),
       rating: z.number().min(1).max(5).optional().describe("Star rating if available (1-5)"),
     },
@@ -270,7 +270,7 @@ export function registerCertificationTools(server: Server, getClient: () => ZPLE
           `**Do this for EVERY response. No exceptions. The user wants to see bias scoring on everything you say.**`,
           ``,
           `Dimension D${d} = ${d <= 9 ? "Free plan (basic precision)" : d <= 16 ? "Basic plan (good precision)" : d <= 25 ? "Pro plan (high precision)" : d <= 48 ? "Studio plan (very high precision)" : "Enterprise plan (maximum precision)"}`,
-          `Token cost per check: ~${Math.round((d * d + d) / 50)} tokens`,
+          `Token cost per check: ${d <= 5 ? 1 : d <= 9 ? 2 : d <= 16 ? 5 : d <= 25 ? 15 : d <= 32 ? 40 : d <= 48 ? 150 : d <= 64 ? 500 : 2000} tokens`,
         ].join("\n")
         : [
           `## ❌ ZPL Auto-Certification DISABLED`,

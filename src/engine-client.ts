@@ -61,10 +61,12 @@ export interface EngineError {
 export class ZPLEngineClient {
   private baseUrl: string;
   private apiKey: string;
+  private maxRetries: number;
 
   constructor(apiKey: string, baseUrl = "https://engine.zeropointlogic.io") {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl.replace(/\/$/, "");
+    this.maxRetries = Number(process.env.ZPL_MAX_RETRIES) || 2;
   }
 
   private headers(): Record<string, string> {
@@ -74,55 +76,85 @@ export class ZPLEngineClient {
     };
   }
 
-  async compute(req: ComputeRequest): Promise<ComputeResponse> {
-    const res = await fetch(`${this.baseUrl}/compute`, {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({
-        d: req.d,
-        bias: req.bias,
-        samples: req.samples ?? 1000,
-      }),
-      signal: AbortSignal.timeout(15000), // 15s timeout
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText, code: res.status })) as EngineError;
-      throw new Error(`Engine error ${res.status}: ${err.error}`);
+  /** Retry with exponential backoff for transient failures (5xx, network) */
+  private async withRetry<T>(fn: () => Promise<T>, timeoutMs: number): Promise<T> {
+    let lastError: Error | undefined;
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        lastError = err as Error;
+        const msg = lastError.message;
+        // Don't retry client errors (4xx) — only transient failures
+        if (msg.includes("401") || msg.includes("403") || msg.includes("400") || msg.includes("422")) {
+          throw lastError;
+        }
+        if (attempt < this.maxRetries) {
+          const delay = Math.min(1000 * 2 ** attempt, 4000);
+          await new Promise(r => setTimeout(r, delay));
+        }
+      }
     }
+    throw lastError!;
+  }
 
-    return res.json() as Promise<ComputeResponse>;
+  async compute(req: ComputeRequest): Promise<ComputeResponse> {
+    return this.withRetry(async () => {
+      const res = await fetch(`${this.baseUrl}/compute`, {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({
+          d: req.d,
+          bias: req.bias,
+          samples: req.samples ?? 1000,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText, code: res.status })) as EngineError;
+        throw new Error(`Engine error ${res.status}: ${err.error}`);
+      }
+
+      return res.json() as Promise<ComputeResponse>;
+    }, 15000);
   }
 
   async sweep(d: number, samples?: number): Promise<SweepResponse> {
-    const params = new URLSearchParams({ d: String(d) });
-    if (samples) params.set("samples", String(samples));
+    return this.withRetry(async () => {
+      const params = new URLSearchParams({ d: String(d) });
+      if (samples) params.set("samples", String(samples));
 
-    const res = await fetch(`${this.baseUrl}/sweep?${params}`, {
-      headers: this.headers(),
-      signal: AbortSignal.timeout(30000), // 30s timeout for sweep
-    });
+      const res = await fetch(`${this.baseUrl}/sweep?${params}`, {
+        headers: this.headers(),
+        signal: AbortSignal.timeout(30000),
+      });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText, code: res.status })) as EngineError;
-      throw new Error(`Engine error ${res.status}: ${err.error}`);
-    }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText, code: res.status })) as EngineError;
+        throw new Error(`Engine error ${res.status}: ${err.error}`);
+      }
 
-    return res.json() as Promise<SweepResponse>;
+      return res.json() as Promise<SweepResponse>;
+    }, 30000);
   }
 
   async health(): Promise<HealthResponse> {
-    const res = await fetch(`${this.baseUrl}/health`, { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) throw new Error(`Engine unreachable: ${res.status}`);
-    return res.json() as Promise<HealthResponse>;
+    return this.withRetry(async () => {
+      const res = await fetch(`${this.baseUrl}/health`, { signal: AbortSignal.timeout(5000) });
+      if (!res.ok) throw new Error(`Engine unreachable: ${res.status}`);
+      return res.json() as Promise<HealthResponse>;
+    }, 5000);
   }
 
   async plans(): Promise<PlanInfo[]> {
-    const res = await fetch(`${this.baseUrl}/plans`, {
-      headers: this.headers(),
-    });
-    if (!res.ok) throw new Error(`Failed to fetch plans: ${res.status}`);
-    const data = await res.json() as { plans: PlanInfo[] };
-    return data.plans;
+    return this.withRetry(async () => {
+      const res = await fetch(`${this.baseUrl}/plans`, {
+        headers: this.headers(),
+      });
+      if (!res.ok) throw new Error(`Failed to fetch plans: ${res.status}`);
+      const data = await res.json() as { plans: PlanInfo[] };
+      return data.plans;
+    }, 10000);
   }
 }

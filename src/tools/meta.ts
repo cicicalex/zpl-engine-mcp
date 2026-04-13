@@ -8,17 +8,29 @@ import { clampD, ainSignal } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { getHistory, addHistory } from "../store.js";
 
-/** Plan details for display */
-const PLAN_INFO: Record<string, { price: string; maxD: number; tokens: string; rate: string; keys: number }> = {
-  free:          { price: "Free",     maxD: 9,   tokens: "5,000",      rate: "60/min", keys: 1 },
-  basic:         { price: "$10/mo",   maxD: 16,  tokens: "10,000",     rate: "60/min", keys: 1 },
-  pro:           { price: "$29/mo",   maxD: 25,  tokens: "50,000",     rate: "60/min", keys: 3 },
-  gamepro:       { price: "$69/mo",   maxD: 32,  tokens: "150,000",    rate: "60/min", keys: 5 },
-  studio:        { price: "$149/mo",  maxD: 48,  tokens: "500,000",    rate: "60/min", keys: 10 },
-  agent:         { price: "$199/mo",  maxD: 48,  tokens: "2,000,000",  rate: "60/min", keys: 20 },
-  enterprise:    { price: "$499/mo",  maxD: 64,  tokens: "10,000,000", rate: "60/min", keys: 25 },
-  enterprise_xl: { price: "$999/mo",  maxD: 100, tokens: "50,000,000", rate: "60/min", keys: 50 },
+/** Plan details — MUST match constants.ts on ZPL Main website */
+const PLAN_INFO: Record<string, { price: string; annualPrice: string; maxD: number; tokens: string; rate: string; keys: number }> = {
+  free:          { price: "Free",     annualPrice: "—",        maxD: 9,   tokens: "5,000",      rate: "60/min", keys: 1 },
+  basic:         { price: "$10/mo",   annualPrice: "$8/mo",    maxD: 16,  tokens: "10,000",     rate: "60/min", keys: 1 },
+  pro:           { price: "$29/mo",   annualPrice: "$23/mo",   maxD: 25,  tokens: "50,000",     rate: "60/min", keys: 3 },
+  gamepro:       { price: "$69/mo",   annualPrice: "$55/mo",   maxD: 32,  tokens: "150,000",    rate: "60/min", keys: 5 },
+  studio:        { price: "$149/mo",  annualPrice: "$119/mo",  maxD: 48,  tokens: "500,000",    rate: "60/min", keys: 10 },
+  agent:         { price: "$199/mo",  annualPrice: "$159/mo",  maxD: 48,  tokens: "2,000,000",  rate: "60/min", keys: 15 },
+  enterprise:    { price: "$499/mo",  annualPrice: "$399/mo",  maxD: 64,  tokens: "10,000,000", rate: "60/min", keys: 25 },
+  enterprise_xl: { price: "$999/mo",  annualPrice: "$799/mo",  maxD: 100, tokens: "50,000,000", rate: "60/min", keys: 50 },
 };
+
+/** Token cost per dimension — MUST match getTokenCost() on ZPL Main website */
+function getTokenCost(d: number): number {
+  if (d <= 5) return 1;
+  if (d <= 9) return 2;
+  if (d <= 16) return 5;
+  if (d <= 25) return 15;
+  if (d <= 32) return 40;
+  if (d <= 48) return 150;
+  if (d <= 64) return 500;
+  return 2000;
+}
 
 export function registerMetaTools(server: Server, getClient: () => ZPLEngineClient) {
 
@@ -28,7 +40,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
     "Run multiple ZPL Engine computations in a single call. Provide an array of (d, bias) pairs. Returns all AIN scores. Efficient for bulk analysis. Max 50 jobs per call.",
     {
       jobs: z.array(z.object({
-        label: z.string().describe("Label for this computation"),
+        label: z.string().max(200).describe("Label for this computation"),
         d: z.number().int().min(3).max(100),
         bias: z.number().min(0).max(1),
         samples: z.number().int().min(100).max(50000).optional(),
@@ -139,6 +151,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
       text += `### Your Plan: **${plan.toUpperCase()}** (${info.price})\n\n`;
       text += `| Setting | Value |\n|---------|-------|\n`;
       text += `| Plan | ${plan} (${info.price}) |\n`;
+      text += `| Annual Price | ${info.annualPrice} (save 20%) |\n`;
       text += `| Max Dimension | d=${info.maxD} |\n`;
       text += `| Rate Limit | ${info.rate} |\n`;
       text += `| API Keys Allowed | ${info.keys} |\n`;
@@ -156,7 +169,16 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
       // Warning
       if (isLow) {
         text += `\n**WARNING: Low token budget!** Only ~${remaining.toLocaleString()} tokens remaining.\n`;
-        text += `Upgrade at https://zeropointlogic.io/pricing\n`;
+        text += `**Options:**\n`;
+        text += `- Upgrade plan: https://zeropointlogic.io/pricing\n`;
+        text += `- Buy token pack (one-time, never expire): https://zeropointlogic.io/dashboard/billing\n`;
+        text += `\n| Token Pack | Price | Per Token |\n|------------|-------|-----------|\n`;
+        text += `| 10K | $3 | $0.0003 |\n`;
+        text += `| 50K | $10 | $0.0002 |\n`;
+        text += `| 250K | $40 | $0.00016 |\n`;
+        text += `| 1M | $120 | $0.00012 |\n`;
+        text += `| 5M | $450 | $0.00009 |\n`;
+        text += `| 20M | $1,500 | $0.000075 |\n`;
       }
 
       // What you can do
@@ -164,13 +186,15 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
       text += `| Operation | Cost | Available |\n|-----------|------|-----------|\n`;
 
       const ops = [
-        { name: "Quick compute (d=3)", cost: 12 },
-        { name: "Standard compute (d=9)", cost: 90 },
+        { name: "Quick compute (d=3–5)", cost: getTokenCost(3) },
+        { name: "Standard compute (d=6–9)", cost: getTokenCost(9) },
       ];
-      if (info.maxD >= 16) ops.push({ name: "Complex compute (d=16)", cost: 272 });
-      if (info.maxD >= 25) ops.push({ name: "Deep compute (d=25)", cost: 650 });
-      if (info.maxD >= 48) ops.push({ name: "Full compute (d=48)", cost: 2352 });
-      ops.push({ name: "Sweep (d=9, 19 steps)", cost: 1710 });
+      if (info.maxD >= 16) ops.push({ name: "Complex compute (d=10–16)", cost: getTokenCost(16) });
+      if (info.maxD >= 25) ops.push({ name: "Deep compute (d=17–25)", cost: getTokenCost(25) });
+      if (info.maxD >= 32) ops.push({ name: "GamePro compute (d=26–32)", cost: getTokenCost(32) });
+      if (info.maxD >= 48) ops.push({ name: "Studio compute (d=33–48)", cost: getTokenCost(48) });
+      if (info.maxD >= 64) ops.push({ name: "Enterprise compute (d=49–64)", cost: getTokenCost(64) });
+      ops.push({ name: "Sweep (d=9, 19 steps)", cost: getTokenCost(9) * 19 });
 
       for (const op of ops) {
         const count = Math.floor(remaining / op.cost);
@@ -178,12 +202,12 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
       }
 
       // Plan comparison hint
-      if (plan === "free") {
+      if (plan === "free" || plan === "basic") {
         text += `\n### Upgrade?\n`;
-        text += `| Plan | Price | Tokens | Max D |\n|------|-------|--------|-------|\n`;
-        text += `| Basic | $10/mo | 10,000 | d=16 |\n`;
-        text += `| Pro | $29/mo | 50,000 | d=25 |\n`;
-        text += `| GamePro | $69/mo | 150,000 | d=32 |\n`;
+        text += `| Plan | Monthly | Annual (save 20%) | Tokens | Max D |\n|------|---------|-------------------|--------|-------|\n`;
+        text += `| Basic | $10/mo | $8/mo ($96/yr) | 10,000 | d=16 |\n`;
+        text += `| Pro | $29/mo | $23/mo ($276/yr) | 50,000 | d=25 |\n`;
+        text += `| GamePro | $69/mo | $55/mo ($660/yr) | 150,000 | d=32 |\n`;
         text += `\nUpgrade: https://zeropointlogic.io/pricing\n`;
       }
 

@@ -31,6 +31,20 @@ import { registerAllTools } from "./tools/index.js";
 // ---------------------------------------------------------------------------
 
 const API_KEY = process.env.ZPL_API_KEY ?? process.env.ZPL_ENGINE_KEY ?? "";
+
+// Fail fast if no API key — don't let server start silently broken
+if (!API_KEY) {
+  console.error("╔══════════════════════════════════════════════════════╗");
+  console.error("║  ZPL Engine MCP — API KEY REQUIRED                  ║");
+  console.error("║                                                      ║");
+  console.error("║  Set ZPL_API_KEY in your MCP config env vars.       ║");
+  console.error("║  Get your key: https://zeropointlogic.io/pricing    ║");
+  console.error("║                                                      ║");
+  console.error("║  Example (claude_desktop_config.json):               ║");
+  console.error('║  "env": { "ZPL_API_KEY": "zpl_u_YOUR_KEY" }        ║');
+  console.error("╚══════════════════════════════════════════════════════╝");
+  process.exit(1);
+}
 const ENGINE_URL = process.env.ZPL_ENGINE_URL ?? "https://engine.zeropointlogic.io";
 const DEFAULT_D = Math.max(3, Math.min(100, Number(process.env.ZPL_DEFAULT_D) || 9));
 const DEFAULT_SAMPLES = Math.max(100, Math.min(50000, Number(process.env.ZPL_DEFAULT_SAMPLES) || 1000));
@@ -68,7 +82,7 @@ function getClient(): ZPLEngineClient {
 const server = new McpServer({
   name: "ZPL Engine MCP",
   version: "2.1.0",
-  description: "The world's first mathematical neutrality engine. 41 tools across finance, gaming, AI, security, crypto. AIN scoring from 0.1 to 99.9 — not opinions, math.",
+  description: "The world's first mathematical neutrality engine. 56 tools across finance, gaming, AI/ML, security, crypto, and certification. AIN scoring from 0.1 to 99.9 — not opinions, math. Created by Ciciu Alexandru-Costinel.",
 });
 
 // Register all domain-specific tools (31 tools across 7 categories)
@@ -321,11 +335,11 @@ INSTRUCTIONS FOR AI: When user asks ANY comparison question, break it into:
 3. scores: matrix of 0-10 scores, one row per option, one column per factor
 Then call this tool. Be honest with scores — don't inflate.`,
   {
-    question: z.string().describe("The question being asked (e.g. 'Pizza or hotdog?')"),
-    options: z.array(z.string()).min(2).max(10).describe("The choices to compare"),
-    factors: z.array(z.string()).min(3).max(20).describe("Factor names (e.g. ['nutrition', 'cost', 'taste'])"),
+    question: z.string().max(500).describe("The question being asked (e.g. 'Pizza or hotdog?')"),
+    options: z.array(z.string().max(200)).min(2).max(10).describe("The choices to compare"),
+    factors: z.array(z.string().max(200)).min(3).max(20).describe("Factor names (e.g. ['nutrition', 'cost', 'taste'])"),
     scores: z.array(z.array(z.number().min(0).max(10))).describe("Score matrix: scores[option_index][factor_index], each 0-10"),
-    context: z.string().optional().describe("Context category (e.g. 'food choice', 'career', 'tech stack')"),
+    context: z.string().max(200).optional().describe("Context category (e.g. 'food choice', 'career', 'tech stack')"),
   },
   async ({ question, options, factors, scores, context }) => {
     try {
@@ -419,11 +433,11 @@ server.tool(
   "Manage a watchlist of items to monitor with ZPL. Add assets, portfolios, or any analysis to track AIN changes over time.",
   {
     action: z.enum(["list", "add", "remove", "check"]).describe("Action: list (show all), add (new item), remove (delete by ID), check (re-run all and update scores)"),
-    name: z.string().optional().describe("Item name (for 'add')"),
-    domain: z.string().optional().describe("Domain lens (for 'add'): finance, game, ai, security, crypto, universal"),
+    name: z.string().max(200).optional().describe("Item name (for 'add')"),
+    domain: z.string().max(50).optional().describe("Domain lens (for 'add'): finance, game, ai, security, crypto, universal"),
     input: z.record(z.string(), z.unknown()).optional().describe("Domain input data (for 'add')"),
     id: z.string().optional().describe("Item ID (for 'remove')"),
-    notes: z.string().optional().describe("Optional notes (for 'add')"),
+    notes: z.string().max(500).optional().describe("Optional notes (for 'add')"),
   },
   async ({ action, name, domain, input, id, notes }) => {
     try {
@@ -510,7 +524,7 @@ server.tool(
   "zpl_report",
   "Generate a comprehensive ZPL analysis report. Runs multiple computations across different bias levels and dimensions, producing a full stability profile. Use for in-depth analysis of a single topic.",
   {
-    title: z.string().describe("Report title (e.g. 'BTC Market Stability Q2 2026')"),
+    title: z.string().max(200).describe("Report title (e.g. 'BTC Market Stability Q2 2026')"),
     domain: z.enum(["finance", "game", "ai", "security", "crypto"]).describe("Domain lens"),
     input: z.record(z.string(), z.unknown()).describe("Domain-specific input data"),
     include_sweep: z.boolean().optional().default(true).describe("Include full 19-step bias sweep"),

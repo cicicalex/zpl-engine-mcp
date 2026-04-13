@@ -16,9 +16,9 @@ export function registerUniversalTools(server: Server, getClient: () => ZPLEngin
     "zpl_decide",
     "Quick decision helper for 2 options. Simpler than zpl_ask — just name two options and their pros/cons scores. Perfect for 'should I do A or B?' questions.",
     {
-      question: z.string().describe("The decision question"),
-      option_a: z.string().describe("First option name"),
-      option_b: z.string().describe("Second option name"),
+      question: z.string().max(500).describe("The decision question"),
+      option_a: z.string().max(200).describe("First option name"),
+      option_b: z.string().max(200).describe("Second option name"),
       a_pros: z.number().min(0).max(10).describe("Option A overall pros score (0-10)"),
       a_cons: z.number().min(0).max(10).describe("Option A overall cons score (0-10, higher = more cons)"),
       b_pros: z.number().min(0).max(10).describe("Option B overall pros score"),
@@ -73,10 +73,10 @@ export function registerUniversalTools(server: Server, getClient: () => ZPLEngin
     "zpl_compare",
     "Structured comparison of 2 items on the same criteria. Provide scores for both items across multiple dimensions. Returns which is more mathematically balanced.",
     {
-      item_a: z.string().describe("First item name"),
-      item_b: z.string().describe("Second item name"),
+      item_a: z.string().max(200).describe("First item name"),
+      item_b: z.string().max(200).describe("Second item name"),
       criteria: z.array(z.object({
-        name: z.string(),
+        name: z.string().max(100),
         score_a: z.number().min(0).max(10),
         score_b: z.number().min(0).max(10),
       })).min(3).max(20).describe("Comparison criteria with scores for both items"),
@@ -124,10 +124,10 @@ export function registerUniversalTools(server: Server, getClient: () => ZPLEngin
     "Rank multiple options by mathematical balance. Provide a list of options with their attribute scores. Returns AIN-ranked list from most to least balanced.",
     {
       options: z.array(z.object({
-        name: z.string(),
+        name: z.string().max(200),
         scores: z.array(z.number().min(0).max(10)).min(3).describe("Attribute scores (0-10)"),
       })).min(2).max(20).describe("Options to rank"),
-      attributes: z.array(z.string()).optional().describe("Attribute names (for table headers)"),
+      attributes: z.array(z.string().max(100)).optional().describe("Attribute names (for table headers)"),
     },
     async ({ options, attributes }) => {
       try {
@@ -167,7 +167,7 @@ export function registerUniversalTools(server: Server, getClient: () => ZPLEngin
     "Check any AI response or text for bias using ZPL Engine. Paste any text and get an AIN neutrality score. Use this to verify how balanced an AI answer is, compare responses, or audit any written content for bias.",
     {
       text: z.string().min(10).max(10000).describe("The text to analyze for bias (AI response, article, opinion, etc.)"),
-      context: z.string().optional().describe("What the text is about (e.g. 'pizza vs ciorba comparison', 'political opinion', 'product review')"),
+      context: z.string().max(300).optional().describe("What the text is about (e.g. 'pizza vs ciorba comparison', 'political opinion', 'product review')"),
     },
     async ({ text, context }) => {
       try {
@@ -232,7 +232,7 @@ export function registerUniversalTools(server: Server, getClient: () => ZPLEngin
     "Explain what an AIN score means in a specific context. Provide a score and context, get a human-readable interpretation of what that neutrality level means for your domain.",
     {
       ain_score: z.number().min(0).max(100).describe("AIN score to explain"),
-      context: z.string().describe("Context for explanation (e.g. 'game economy', 'stock portfolio', 'AI model', 'hiring process')"),
+      context: z.string().max(300).describe("Context for explanation (e.g. 'game economy', 'stock portfolio', 'AI model', 'hiring process')"),
     },
     async ({ ain_score, context }) => {
       const signal = ainSignal(ain_score);

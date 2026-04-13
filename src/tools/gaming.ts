@@ -16,11 +16,11 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
     "Analyze loot table fairness. Provide drop rates for items/rarities. Returns AIN showing whether drops are fair or if certain items dominate unfairly. Works for any game: RPG, MMO, gacha, idle, card games.",
     {
       items: z.array(z.object({
-        name: z.string().describe("Item/rarity name"),
+        name: z.string().max(100).describe("Item/rarity name"),
         drop_rate: z.number().min(0).describe("Drop rate (% or weight, same unit for all)"),
       })).min(2).max(50).describe("Loot table items with drop rates"),
       expected_uniform: z.boolean().optional().default(false).describe("True if all items should drop equally"),
-      game: z.string().optional().describe("Game name for label"),
+      game: z.string().max(200).optional().describe("Game name for label"),
     },
     async ({ items, expected_uniform, game }) => {
       try {
@@ -60,7 +60,7 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
     {
       team_a: z.array(z.number()).min(1).max(20).describe("Team A player ratings/skill levels"),
       team_b: z.array(z.number()).min(1).max(20).describe("Team B player ratings/skill levels"),
-      game: z.string().optional().describe("Game name"),
+      game: z.string().max(200).optional().describe("Game name"),
     },
     async ({ team_a, team_b, game }) => {
       try {
@@ -111,7 +111,7 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
     "Analyze game economy health. Provide resource production vs consumption rates. Detects inflation, deflation, or balanced economy.",
     {
       resources: z.array(z.object({
-        name: z.string().describe("Resource name (gold, wood, gems, etc.)"),
+        name: z.string().max(100).describe("Resource name (gold, wood, gems, etc.)"),
         production: z.number().min(0).describe("Production rate per time unit"),
         consumption: z.number().min(0).describe("Consumption/sink rate per time unit"),
       })).min(2).max(30).describe("Game resources with flow rates"),
@@ -162,7 +162,7 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
     "Analyze PvP balance across classes, weapons, or characters. Provide win rates, pick rates, or power scores. Detects dominant meta and underpowered options.",
     {
       entities: z.array(z.object({
-        name: z.string().describe("Class/weapon/character name"),
+        name: z.string().max(100).describe("Class/weapon/character name"),
         win_rate: z.number().optional().describe("Win rate % (e.g. 52.3)"),
         pick_rate: z.number().optional().describe("Pick rate % (e.g. 15.2)"),
         power: z.number().optional().describe("Power score (arbitrary scale)"),
@@ -208,7 +208,7 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
     "Audit gacha/loot box system fairness. Provide banner rates and pity system info. Checks if the system is mathematically fair or predatory. Useful for game compliance and player protection.",
     {
       tiers: z.array(z.object({
-        name: z.string().describe("Rarity tier (SSR, SR, R, N)"),
+        name: z.string().max(50).describe("Rarity tier (SSR, SR, R, N)"),
         rate: z.number().min(0).describe("Pull rate %"),
         value_score: z.number().min(0).max(10).optional().describe("Desirability score 0-10"),
       })).min(2).max(10).describe("Gacha tiers"),

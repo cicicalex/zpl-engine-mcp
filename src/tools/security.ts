@@ -16,11 +16,11 @@ export function registerSecurityTools(server: Server, getClient: () => ZPLEngine
     "Map vulnerability distribution across system components. Provide CVSS scores or risk levels per component. Shows where risk is concentrated and whether security posture is balanced.",
     {
       components: z.array(z.object({
-        name: z.string().describe("Component name (e.g. 'auth service', 'database', 'API gateway')"),
+        name: z.string().max(200).describe("Component name (e.g. 'auth service', 'database', 'API gateway')"),
         score: z.number().min(0).max(10).describe("Vulnerability score (CVSS 0-10)"),
         count: z.number().int().min(0).optional().describe("Optional: number of vulnerabilities"),
       })).min(2).max(50).describe("System components with vulnerability scores"),
-      system_name: z.string().optional(),
+      system_name: z.string().max(200).optional(),
     },
     async ({ components, system_name }) => {
       try {
@@ -66,7 +66,7 @@ export function registerSecurityTools(server: Server, getClient: () => ZPLEngine
     "Analyze risk matrix balance. Provide risks with likelihood and impact scores. Detects whether risk management is covering all areas or leaving blind spots.",
     {
       risks: z.array(z.object({
-        name: z.string(),
+        name: z.string().max(200),
         likelihood: z.number().min(1).max(5).describe("Likelihood 1-5"),
         impact: z.number().min(1).max(5).describe("Impact 1-5"),
       })).min(3).max(30).describe("Risks with likelihood and impact"),
@@ -106,11 +106,11 @@ export function registerSecurityTools(server: Server, getClient: () => ZPLEngine
     "Score compliance across multiple standards/categories. Provide scores per compliance area. Shows overall compliance health and weakest areas.",
     {
       areas: z.array(z.object({
-        name: z.string().describe("Compliance area (e.g. 'Data Protection', 'Access Control', 'Encryption')"),
+        name: z.string().max(200).describe("Compliance area (e.g. 'Data Protection', 'Access Control', 'Encryption')"),
         score: z.number().min(0).max(100).describe("Compliance score 0-100%"),
         weight: z.number().optional().describe("Optional: area importance weight"),
       })).min(3).max(30).describe("Compliance areas with scores"),
-      framework: z.string().optional().describe("Framework name (SOC2, ISO27001, GDPR, HIPAA, etc.)"),
+      framework: z.string().max(100).optional().describe("Framework name (SOC2, ISO27001, GDPR, HIPAA, etc.)"),
     },
     async ({ areas, framework }) => {
       try {
