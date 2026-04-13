@@ -32,19 +32,7 @@ import { registerAllTools } from "./tools/index.js";
 
 const API_KEY = process.env.ZPL_API_KEY ?? process.env.ZPL_ENGINE_KEY ?? "";
 
-// Fail fast if no API key — don't let server start silently broken
-if (!API_KEY) {
-  console.error("╔══════════════════════════════════════════════════════╗");
-  console.error("║  ZPL Engine MCP — API KEY REQUIRED                  ║");
-  console.error("║                                                      ║");
-  console.error("║  Set ZPL_API_KEY in your MCP config env vars.       ║");
-  console.error("║  Get your key: https://zeropointlogic.io/pricing    ║");
-  console.error("║                                                      ║");
-  console.error("║  Example (claude_desktop_config.json):               ║");
-  console.error('║  "env": { "ZPL_API_KEY": "zpl_u_YOUR_KEY" }        ║');
-  console.error("╚══════════════════════════════════════════════════════╝");
-  process.exit(1);
-}
+// API key check moved to main() — allows Smithery sandbox scanning without key
 const ENGINE_URL = process.env.ZPL_ENGINE_URL ?? "https://engine.zeropointlogic.io";
 const DEFAULT_D = Math.max(3, Math.min(100, Number(process.env.ZPL_DEFAULT_D) || 9));
 const DEFAULT_SAMPLES = Math.max(100, Math.min(50000, Number(process.env.ZPL_DEFAULT_SAMPLES) || 1000));
@@ -608,7 +596,31 @@ server.tool(
 // Start server
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Smithery sandbox — allows Smithery to scan tools without real credentials
+// ---------------------------------------------------------------------------
+
+export function createSandboxServer() {
+  return server;
+}
+
+// ---------------------------------------------------------------------------
+// Main — connect to stdio transport
+// ---------------------------------------------------------------------------
+
 async function main() {
+  if (!API_KEY) {
+    console.error("╔══════════════════════════════════════════════════════╗");
+    console.error("║  ZPL Engine MCP — API KEY REQUIRED                  ║");
+    console.error("║                                                      ║");
+    console.error("║  Set ZPL_API_KEY in your MCP config env vars.       ║");
+    console.error("║  Get your key: https://zeropointlogic.io/pricing    ║");
+    console.error("║                                                      ║");
+    console.error("║  Example (claude_desktop_config.json):               ║");
+    console.error('║  "env": { "ZPL_API_KEY": "zpl_u_YOUR_KEY" }        ║');
+    console.error("╚══════════════════════════════════════════════════════╝");
+    process.exit(1);
+  }
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
