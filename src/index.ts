@@ -625,7 +625,11 @@ async function main() {
   await server.connect(transport);
 }
 
-main().catch((err) => {
-  console.error("Fatal:", err);
-  process.exit(1);
-});
+// Only auto-run when executed directly — skip when Smithery scanner imports the module
+const isScanMode = process.argv[1]?.includes("scan-");
+if (!isScanMode) {
+  main().catch((err) => {
+    console.error("Fatal:", err);
+    process.exit(1);
+  });
+}
