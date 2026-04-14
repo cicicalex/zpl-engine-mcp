@@ -1,6 +1,6 @@
 {
   "name": "zpl-engine-mcp",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "The world's first mathematical neutrality engine. 56 tools across finance, gaming, AI/ML, security, crypto, certification, and more. AIN scoring (0.1–99.9) for bias detection, risk analysis, and balance verification.",
   "type": "module",
   "main": "dist/index.js",

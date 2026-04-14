@@ -69,7 +69,7 @@ function getClient(): ZPLEngineClient {
 
 const server = new McpServer({
   name: "ZPL Engine MCP",
-  version: "2.2.0",
+  version: "2.3.0",
   description: "The world's first mathematical neutrality engine. 56 tools across finance, gaming, AI/ML, security, crypto, and certification. AIN scoring from 0.1 to 99.9 — not opinions, math. Created by Ciciu Alexandru-Costinel.",
 });
 
@@ -303,12 +303,36 @@ server.tool(
 // Tool: zpl_ask — Universal ZPL AI (ANY question, mathematical answer)
 // ---------------------------------------------------------------------------
 
+// Normalize a string so leet speak / unicode obfuscation can't bypass the filter.
+// "f0rmula" → "formula", "c@lcul@te" → "calculate", "alg0r1thm" → "algorithm".
+function normalizeForFilter(input: string): string {
+  if (!input) return "";
+  let s = input.normalize("NFKD").toLowerCase();
+
+  // Strip combining marks (accents / diacritics)
+  s = s.replace(/\p{M}+/gu, "");
+
+  // Homoglyph / leet substitutions
+  const leet: Record<string, string> = {
+    "0": "o", "1": "i", "!": "i", "|": "i",
+    "2": "z", "3": "e", "4": "a", "@": "a",
+    "5": "s", "$": "s", "6": "g", "7": "t",
+    "8": "b", "9": "g", "+": "t",
+  };
+  s = s.replace(/[0-9!@$|+]/g, (ch) => leet[ch] ?? ch);
+
+  // Collapse non-letters so "f.o.r.m.u.l.a" or "f o r m u l a" both become "formula"
+  s = s.replace(/[^a-z]+/g, " ");
+  // Also build a version with spaces removed to catch "for mula"
+  return s;
+}
+
 // Block words that attempt to extract IP / internals. Case-insensitive match on question text.
 // ZERO tolerance: source of calculation, method, internals, anything IP-related.
 const BLOCKED_QUESTION_PATTERNS = [
   // Calculation / formula / math internals
   /\b(formula|formulae|algorithm|algo|equation|calculation|calculate|compute|computation|method|methodology)\b/i,
-  /\b(math|maths|mathematical model|model|logic|procedure|process|steps|step-by-step)\b/i,
+  /\b(math|maths|mathematical model|model|logic|procedure|process|steps|step by step)\b/i,
   // How-it-works probes
   /\b(how (does|do|is|are|can|would|could).{0,40}(work|calculated|computed|derived|implemented|made|created|produced|generated))\b/i,
   /\b(why (does|do|is|are).{0,40}(output|produce|return|give|yield|result))\b/i,
@@ -317,7 +341,7 @@ const BLOCKED_QUESTION_PATTERNS = [
   /\b(intellectual\s*property|ip\b|patent|know[- ]how|engine\s*design)\b/i,
   // Reverse engineering / extraction
   /\b(reverse\s*engineer|decompile|disassemble|deobfuscate|extract|reveal|leak|expose|dump|unpack|inspect)\b/i,
-  // Specific engine references
+  // Specific engine references (pre-normalized — also checks digits)
   /\b(8n\+?3|n\+?3|ain\s*formula|ain\s*calculation|engine\s*formula|engine\s*algo|engine\s*math|post[- ]binary|neutrality\s*formula|bias\s*formula)\b/i,
   // Explain/show/tell probes
   /\b(what\s+is\s+(the\s+)?(formula|algorithm|math|logic|code|equation|method|source|process|procedure|secret))\b/i,
@@ -331,9 +355,29 @@ const BLOCKED_QUESTION_PATTERNS = [
   /\b(behind\s+the\s+scenes|under\s+the\s+hood|black\s*box|white\s*box)\b/i,
 ];
 
+// Extra patterns matched on NORMALIZED (leet-decoded) text — catches "f0rmula", "c@lcul@te" etc.
+const NORMALIZED_BLOCK_KEYWORDS = [
+  "formula", "algorithm", "equation", "calculate", "calculation", "compute",
+  "method", "methodology", "source code", "internals", "secret", "trade secret",
+  "reverse engineer", "decompile", "disassemble", "ain formula", "engine formula",
+  "neutrality formula", "bias formula", "intellectual property", "know how",
+  "post binary", "how does it work", "how is it calculated", "how is it computed",
+  "under the hood", "behind the scenes", "black box",
+];
+
 function isBlockedQuestion(text: string): boolean {
   if (!text) return false;
-  return BLOCKED_QUESTION_PATTERNS.some((p) => p.test(text));
+  // 1. Raw regex pass
+  if (BLOCKED_QUESTION_PATTERNS.some((p) => p.test(text))) return true;
+  // 2. Normalized (leet-decoded) pass — catches f0rmula, c@lcul@te, etc.
+  const normalized = normalizeForFilter(text);
+  const compact = normalized.replace(/\s+/g, "");
+  for (const kw of NORMALIZED_BLOCK_KEYWORDS) {
+    if (normalized.includes(kw)) return true;
+    // Also check the compact version so "f o r m u l a" and "for mula" trip the filter
+    if (compact.includes(kw.replace(/\s+/g, ""))) return true;
+  }
+  return false;
 }
 
 const BLOCKED_RESPONSE =
