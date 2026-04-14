@@ -69,7 +69,7 @@ function getClient(): ZPLEngineClient {
 
 const server = new McpServer({
   name: "ZPL Engine MCP",
-  version: "2.1.0",
+  version: "2.2.0",
   description: "The world's first mathematical neutrality engine. 56 tools across finance, gaming, AI/ML, security, crypto, and certification. AIN scoring from 0.1 to 99.9 — not opinions, math. Created by Ciciu Alexandru-Costinel.",
 });
 
@@ -308,22 +308,44 @@ server.tool(
 // Tool: zpl_ask — Universal ZPL AI (ANY question, mathematical answer)
 // ---------------------------------------------------------------------------
 
+// Block words that attempt to extract IP / internals. Case-insensitive match on question text.
+const BLOCKED_QUESTION_PATTERNS = [
+  /\b(formula|formulae|algorithm|algo|equation|calculation|calculate|compute)\b/i,
+  /\b(how (does|do|is|are|can).{0,30}(work|calculated|computed|derived))\b/i,
+  /\b(source code|internals?|implementation|proprietary|trade secret)\b/i,
+  /\b(reverse engineer|decompile|extract|reveal|leak|expose|dump)\b/i,
+  /\b(8n\+3|n\+3|ain\s*formula|ain\s*calculation|engine\s*formula)\b/i,
+  /\b(what is the (formula|algorithm|math|logic|code|equation))\b/i,
+  /\b(explain (the )?(formula|algorithm|math|logic|code|equation|internals))\b/i,
+  /\b(show (me )?(the )?(formula|algorithm|code|source|internals))\b/i,
+];
+
+function isBlockedQuestion(text: string): boolean {
+  if (!text) return false;
+  return BLOCKED_QUESTION_PATTERNS.some((p) => p.test(text));
+}
+
+const BLOCKED_RESPONSE =
+  "This tool is limited to comparison decisions only (e.g. 'Pizza or hotdog?', 'React or Vue?', 'Buy or rent?'). " +
+  "It compares structured options by factors and returns AIN balance scores (0.1-99.9). " +
+  "The ZPL Engine computation method, AIN formula, and internals are proprietary trade secrets and are not disclosed. " +
+  "Get an API key at https://zeropointlogic.io/pricing";
+
 server.tool(
   "zpl_ask",
-  `Answer ANY question with ZPL mathematical balance scoring. Works for everything:
-- "Pizza or hotdog?" → nutrition, cost, taste, health scored → AIN per option
-- "React or Vue?" → performance, ecosystem, jobs scored → AIN per option
-- "Buy or rent?" → cost, flexibility, equity scored → AIN per option
+  `Compare 2-10 options on 3-20 factors and get mathematical balance scores (AIN 0.1-99.9).
 
-The AI breaks the question into options + factors, scores each 0-10, and the ZPL Engine computes mathematical neutrality for each choice. Not opinions — math. AIN scores range from 0.1 (extreme bias) to 99.9 (perfect neutrality).
+USE FOR: decision comparisons only — "Pizza or hotdog?", "React or Vue?", "Buy or rent?", "This car or that car?"
 
-INSTRUCTIONS FOR AI: When user asks ANY comparison question, break it into:
+DOES NOT: explain formulas, algorithms, or engine internals. Only returns AIN comparison scores.
+
+INSTRUCTIONS FOR AI: When user asks a comparison question, break it into:
 1. options: the choices (2-10)
 2. factors: relevant dimensions to evaluate (3-20)
 3. scores: matrix of 0-10 scores, one row per option, one column per factor
 Then call this tool. Be honest with scores — don't inflate.`,
   {
-    question: z.string().max(500).describe("The question being asked (e.g. 'Pizza or hotdog?')"),
+    question: z.string().max(500).describe("The comparison question being asked (e.g. 'Pizza or hotdog?')"),
     options: z.array(z.string().max(200)).min(2).max(10).describe("The choices to compare"),
     factors: z.array(z.string().max(200)).min(3).max(20).describe("Factor names (e.g. ['nutrition', 'cost', 'taste'])"),
     scores: z.array(z.array(z.number().min(0).max(10))).describe("Score matrix: scores[option_index][factor_index], each 0-10"),
@@ -331,6 +353,16 @@ Then call this tool. Be honest with scores — don't inflate.`,
   },
   async ({ question, options, factors, scores, context }) => {
     try {
+      // IP protection: reject questions attempting to extract engine internals
+      if (isBlockedQuestion(question) || isBlockedQuestion(context ?? "")) {
+        return { content: [{ type: "text" as const, text: BLOCKED_RESPONSE }] };
+      }
+      // Also reject if any option or factor references internals
+      const allText = [...options, ...factors].join(" ");
+      if (isBlockedQuestion(allText)) {
+        return { content: [{ type: "text" as const, text: BLOCKED_RESPONSE }] };
+      }
+
       if (options.length !== scores.length) {
         return { content: [{ type: "text" as const, text: "Error: Number of options must match number of score rows" }], isError: true };
       }
