@@ -35,13 +35,13 @@ Your key starts with `zpl_u_` and is shown **once** — save it immediately.
 **Via npm (recommended):**
 
 ```bash
-npm install @zeropointlogic/engine-mcp
+npm install zpl-engine-mcp
 ```
 
 **Or clone and build:**
 
 ```bash
-git clone https://github.com/zeropointlogic/engine-mcp.git
+git clone https://github.com/cicicalex/engine-mcp.git
 cd engine-mcp
 npm install
 npm run build
@@ -56,7 +56,7 @@ npm run build
   "mcpServers": {
     "zpl-engine": {
       "command": "npx",
-      "args": ["-y", "@zeropointlogic/engine-mcp"],
+      "args": ["-y", "zpl-engine-mcp"],
       "env": {
         "ZPL_API_KEY": "zpl_u_YOUR_KEY_HERE"
       }
@@ -72,7 +72,7 @@ npm run build
   "mcpServers": {
     "zpl-engine": {
       "command": "npx",
-      "args": ["-y", "@zeropointlogic/engine-mcp"],
+      "args": ["-y", "zpl-engine-mcp"],
       "env": {
         "ZPL_API_KEY": "zpl_u_YOUR_KEY_HERE"
       }
@@ -209,9 +209,18 @@ The MCP server **never** sees or contains the engine formula. It sends `(d, bias
 - Fail-fast startup if `ZPL_API_KEY` is not set
 - Local history sanitizes API key prefixes before writing
 
+## IP Protection (v2.2.0+)
+
+The ZPL Engine computation method is a trade secret of Zero Point Logic. This MCP has been hardened to never expose it:
+
+- Tool outputs return **AIN score + status + tokens used only**. No bias, deviation, p-output, dimension, or timing values are exposed.
+- `zpl_ask` rejects questions that probe for the formula, algorithm, method, source, internals, or any IP-related terms.
+- The MCP never receives or processes the engine formula — it sends `(d, bias, samples)` to the server and receives `(ain, status)` back.
+- All computation happens server-side on the proprietary engine. The client-side code contains no algorithmic secrets.
+
 ## License
 
-MIT
+MIT (covers the MCP client code only). The ZPL Engine computation algorithm, AIN formula, and server-side processing are proprietary trade secrets of Zero Point Logic and are **NOT** covered by this license.
 
 ## Author
 
