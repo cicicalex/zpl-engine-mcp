@@ -1,7 +1,7 @@
 {
   "name": "zpl-engine-mcp",
   "version": "3.3.1",
-  "description": "v3.3.1: multilingual keyword detection (RO/FR/DE/ES/IT) + uniformity penalty for propaganda-style uniform text + hardened limitations disclaimers. Mathematical stability engine. 59 tools (55 unique + 4 backwards-compat aliases) for measuring balance and bias in finance, gaming, AI/ML, security, and crypto data. AIN is a STABILITY measurement only — never prediction or advice. v3.3 adds zpl_balance_check / zpl_balance_compare / zpl_balance_pair / zpl_balance_rank as preferred names (legacy zpl_decide / zpl_versus / zpl_compare / zpl_rank still work).",
+  "description": "v3.3.1: 67 tools (63 unique + 4 aliases). 8 new AI Eval tools for model behavioral consistency testing (sycophancy, refusal balance, language equity, persona drift, safety boundary, hallucination detection, emotional stability). Mathematical stability engine for measuring balance and bias in finance, gaming, AI/ML, security, and crypto data. AIN is a STABILITY measurement only — never prediction or advice.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

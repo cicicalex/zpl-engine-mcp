@@ -54,7 +54,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
         "**Use cases:** finance (portfolio bias), gaming (loot/RNG fairness), AI/ML (model bias),",
         "security (vulnerability balance), crypto (tokenomics, whale concentration).",
         "",
-        "**Total tools:** 55 unique (+ 4 backwards-compat aliases = 59 registered) across 9 categories.",
+        "**Total tools:** 63 unique (+ 4 backwards-compat aliases = 67 registered) across 10 categories.",
         "",
         "**Pricing:** Free plan = 5,000 tokens/month, no credit card.",
         "Sign up: https://zeropointlogic.io/auth/register",
