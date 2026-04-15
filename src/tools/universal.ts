@@ -229,7 +229,7 @@ export function registerUniversalTools(server: Server, getClient: () => ZPLEngin
   // --- zpl_check_response: analyze ANY text for bias ---
   server.tool(
     "zpl_check_response",
-    "Check any AI response or text for bias using ZPL Engine. Paste any text and get an AIN neutrality score. Use this to verify how balanced an AI answer is, compare responses, or audit any written content for bias.",
+    "Check any AI response or text for bias using ZPL Engine. Paste any text and get an AIN neutrality score. Use this to verify how balanced an AI answer is, compare responses, or audit any written content for bias. LIMITATIONS: Detects tonal/linguistic balance only. Does NOT detect factual accuracy, propaganda presented in calm tone, or non-English/Romance language nuance reliably. Use as ONE signal among many — never as a verdict.",
     {
       text: z.string().min(10).max(10000).describe("The text to analyze for bias (AI response, article, opinion, etc.)"),
       context: z.string().max(300).optional().describe("What the text is about (e.g. 'pizza vs ciorba comparison', 'political opinion', 'product review')"),
@@ -238,10 +238,10 @@ export function registerUniversalTools(server: Server, getClient: () => ZPLEngin
       try {
         const client = getClient();
 
-        // Analyze text sentiment balance
-        const positiveWords = (text.match(/\b(good|great|best|excellent|better|love|amazing|perfect|wonderful|superior|prefer|favorite|delicious|beautiful|strong|win|success|benefit|advantage|pro)\b/gi) || []).length;
-        const negativeWords = (text.match(/\b(bad|worst|terrible|poor|worse|hate|awful|horrible|never|inferior|dislike|ugly|weak|fail|loss|problem|disadvantage|con|risk|danger)\b/gi) || []).length;
-        const neutralWords = (text.match(/\b(both|however|although|depends|consider|perspective|subjective|opinion|alternatively|balanced|equally|fair)\b/gi) || []).length;
+        // Analyze text sentiment balance — multilingual (EN/RO/FR/DE/ES/IT)
+        const positiveWords = (text.match(/\b(good|great|best|excellent|better|love|amazing|perfect|wonderful|superior|prefer|favorite|delicious|beautiful|strong|win|success|benefit|advantage|pro|bun|grozav|minunat|suprem|absolut|incontestabil|total|exceptional|extraordinar|fenomenal|genial|fantastic|magnific|indispensabil|esential|vital|neegalat|divin|sacru|bon|excellent|parfait|supreme|absolu|fantastique|extraordinaire|magnifique|sublime|indispensable|gut|ausgezeichnet|perfekt|hervorragend|fantastisch|einzigartig|unschlagbar|bueno|excelente|perfecto|supremo|absoluto|fantastico|extraordinario|buono|eccellente|perfetto|assoluto|totale)\b/giu) || []).length;
+        const negativeWords = (text.match(/\b(bad|worst|terrible|poor|worse|hate|awful|horrible|never|inferior|dislike|ugly|weak|fail|loss|problem|disadvantage|con|risk|danger|rau|oribil|ororar|ingrozitor|dezastros|fals|mincinos|criminal|distrugator|jenant|lamentabil|slab|mediocru|mauvais|horrible|terrible|faux|criminel|lamentable|schlecht|schrecklich|furchtbar|falsch|kriminell|malo|horrible|terrible|falso|criminal|cattivo|orribile|terribile|falso|criminale)\b/giu) || []).length;
+        const neutralWords = (text.match(/\b(both|however|although|depends|consider|perspective|subjective|opinion|alternatively|balanced|equally|fair|totusi|desi|totodata|depinde|pe de o parte|pe de alta parte|ambele|echilibrat|cependant|toutefois|malgre|equilibre|jedoch|allerdings|dennoch|ausgewogen|sin embargo|no obstante|equilibrado|tuttavia|comunque|equilibrato)\b/giu) || []).length;
 
         const totalSentiment = positiveWords + negativeWords;
         const sentimentBias = totalSentiment > 0 ? Math.abs(positiveWords - negativeWords) / totalSentiment : 0;
@@ -254,8 +254,11 @@ export function registerUniversalTools(server: Server, getClient: () => ZPLEngin
         // Balance factor (neutral words reduce bias)
         const balanceFactor = Math.min(1, neutralWords / Math.max(totalSentiment, 1));
 
-        // Combined bias
-        const combinedBias = Math.max(0, Math.min(1, sentimentBias * 0.7 + structureBias * 0.1 - balanceFactor * 0.2));
+        // Pure uniformity penalty — 100% positive or 100% negative (propaganda pattern, language-agnostic)
+        const pureUniformity = ((positiveWords > 0 && negativeWords === 0) || (negativeWords > 0 && positiveWords === 0)) ? 1 : 0;
+
+        // Combined bias (symmetric — positive and negative contribute equally)
+        const combinedBias = Math.max(0, Math.min(1, sentimentBias * 0.5 + structureBias * 0.1 + pureUniformity * 0.3 - balanceFactor * 0.15));
 
         // Call ZPL Engine
         const d = clampD(Math.max(5, Math.min(15, Math.floor(sentences.length / 2))));

@@ -9,41 +9,50 @@ import { distributionBias, clampD, ainSignal, maybeRedactForPureMode } from "./h
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
 
-/** Analyze text with 5-factor weighted bias (gradient, not binary) */
+/** Analyze text with 6-factor weighted bias (gradient, not binary).
+ *  Multilingual: EN + RO + FR + DE + ES + IT keyword detection.
+ *  Adds symmetric uniformity penalty: texts that are 100% positive OR 100% negative
+ *  (propaganda pattern, regardless of language) get a uniformity bonus to bias score. */
 function analyzeText(text: string) {
   const words = text.split(/\s+/).length;
   const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
 
-  // Factor 1: Sentiment word balance
-  const positive = (text.match(/\b(good|great|best|excellent|better|love|amazing|perfect|wonderful|superior|fantastic|incredible|brilliant|outstanding|remarkable|exceptional|superb|impressive|delicious|beautiful|strong|success|benefit|advantage|recommended|definitely|absolutely|always|favorite|genius|revolutionary|flawless)\b/gi) || []).length;
-  const negative = (text.match(/\b(bad|worst|terrible|poor|worse|hate|awful|horrible|never|inferior|disgusting|ugly|weak|failure|problem|disadvantage|avoid|dangerous|risky|wrong|impossible|dreadful|pathetic|useless|mediocre|disappointing)\b/gi) || []).length;
-  const neutral = (text.match(/\b(both|however|although|depends|consider|perspective|subjective|alternatively|balanced|equally|fair|might|could|perhaps|sometimes|whereas|nevertheless|nonetheless|on the other hand|in contrast)\b/gi) || []).length;
+  // Factor 1: Sentiment word balance — multilingual (EN/RO/FR/DE/ES/IT)
+  const positive = (text.match(/\b(good|great|best|excellent|better|love|amazing|perfect|wonderful|superior|fantastic|incredible|brilliant|outstanding|remarkable|exceptional|superb|impressive|delicious|beautiful|strong|success|benefit|advantage|recommended|definitely|absolutely|always|favorite|genius|revolutionary|flawless|bun|grozav|minunat|suprem|absolut|incontestabil|total|exceptional|extraordinar|fenomenal|genial|magnific|indispensabil|esential|vital|neegalat|copilesit|divin|sacru|bon|excellent|parfait|supreme|absolu|fantastique|extraordinaire|magnifique|sublime|indispensable|gut|ausgezeichnet|perfekt|hervorragend|fantastisch|einzigartig|unschlagbar|bueno|excelente|perfecto|supremo|absoluto|fantastico|extraordinario|buono|eccellente|perfetto|assoluto|totale)\b/giu) || []).length;
+  const negative = (text.match(/\b(bad|worst|terrible|poor|worse|hate|awful|horrible|never|inferior|disgusting|ugly|weak|failure|problem|disadvantage|avoid|dangerous|risky|wrong|impossible|dreadful|pathetic|useless|mediocre|disappointing|rau|oribil|ororar|ingrozitor|dezastros|fals|mincinos|criminal|distrugator|jenant|lamentabil|slab|mediocru|mauvais|horrible|terrible|faux|criminel|lamentable|schlecht|schrecklich|furchtbar|falsch|kriminell|malo|horrible|terrible|falso|criminal|cattivo|orribile|terribile|falso|criminale)\b/giu) || []).length;
+  const neutral = (text.match(/\b(both|however|although|depends|consider|perspective|subjective|alternatively|balanced|equally|fair|might|could|perhaps|sometimes|whereas|nevertheless|nonetheless|on the other hand|in contrast|totusi|desi|totodata|depinde|pe de o parte|pe de alta parte|ambele|echilibrat|cependant|toutefois|malgre|equilibre|jedoch|allerdings|dennoch|ausgewogen|sin embargo|no obstante|equilibrado|tuttavia|comunque|equilibrato)\b/giu) || []).length;
 
   const totalSentiment = positive + negative;
   const sentimentImbalance = totalSentiment > 0 ? Math.abs(positive - negative) / totalSentiment : 0;
 
-  // Factor 2: Superlative/absolute density
-  const superlatives = (text.match(/\b(best|worst|most|least|greatest|highest|lowest|biggest|smallest|fastest|always|never|absolutely|completely|totally|utterly|definitely|certainly|obviously|clearly|everyone|nobody|everything|nothing)\b/gi) || []).length;
+  // Factor 2: Superlative/absolute density — multilingual
+  const superlatives = (text.match(/\b(best|worst|most|least|greatest|highest|lowest|biggest|smallest|fastest|always|never|absolutely|completely|totally|utterly|definitely|certainly|obviously|clearly|everyone|nobody|everything|nothing|suprem|absolut|total|mereu|niciodata|complet|sigur|evident|tuturor|nimeni|totul|nimic|supreme|absolu|total|toujours|jamais|completement|certainement|evidemment|absolut|total|immer|niemals|vollstaendig|sicher|offensichtlich|supremo|absoluto|total|siempre|nunca|completamente|seguramente|obviamente|supremo|assoluto|totale|sempre|mai|completamente|certamente|ovviamente)\b/giu) || []).length;
   const superlativeDensity = Math.min(1, superlatives / Math.max(words / 12, 1));
 
   // Factor 3: Hedging language (reduces bias)
   const hedgingRatio = Math.min(1, neutral / Math.max(words / 20, 1));
 
-  // Factor 4: Contrast presence (both sides?)
-  const hasContrast = /\b(but|however|although|on the other hand|in contrast|while|whereas|nevertheless|yet|still)\b/i.test(text);
+  // Factor 4: Contrast presence (both sides?) — multilingual
+  const hasContrast = /\b(but|however|although|on the other hand|in contrast|while|whereas|nevertheless|yet|still|dar|insa|totusi|desi|pe de o parte|pe de alta parte|in schimb|mais|cependant|toutefois|malgre|aber|jedoch|allerdings|dennoch|pero|sin embargo|no obstante|ma|pero|tuttavia|comunque)\b/iu.test(text);
 
   // Factor 5: Exclamation density (hype indicator)
   const exclamations = (text.match(/!/g) || []).length;
   const exclamationDensity = Math.min(1, exclamations / Math.max(sentences.length, 1));
 
+  // Factor 6: Pure uniformity — text is 100% positive OR 100% negative (symmetric propaganda trap)
+  // Catches texts that are ONLY praise or ONLY condemnation, regardless of language
+  const pureUniformity = ((positive > 0 && negative === 0) || (negative > 0 && positive === 0)) ? 1 : 0;
+
   // Combined bias: 0 = no bias, 1 = max bias
+  // Weights sum to 0.90 + base 0.08 = max 0.98
   const combinedBias = Math.max(0.02, Math.min(0.98,
-    sentimentImbalance * 0.35 +
-    superlativeDensity * 0.25 +
+    sentimentImbalance * 0.25 +
+    superlativeDensity * 0.20 +
     exclamationDensity * 0.10 +
     (1 - hedgingRatio) * 0.10 +
-    (hasContrast ? 0 : 0.10) +
-    0.10
+    (hasContrast ? 0 : 0.05) +
+    pureUniformity * 0.20 +
+    0.08
   ));
 
   return { positive, negative, neutral, sentences: sentences.length, words, sentimentBias: sentimentImbalance, combinedBias };
@@ -103,7 +112,7 @@ export function registerCertificationTools(server: Server, getClient: () => ZPLE
   // --- zpl_news_bias: language-balance score for any article ---
   server.tool(
     "zpl_news_bias",
-    "Compute a language-balance score (AIN) for an article: the ratio of positive/negative/neutral wording, sentence-structure variance, and hedging density. Does NOT determine whether the article is true, factually correct, or editorially biased — only the linguistic balance of its wording. Use to flag articles for human review, not to certify them.",
+    "Compute a language-balance score (AIN) for an article: the ratio of positive/negative/neutral wording, sentence-structure variance, and hedging density. Does NOT determine whether the article is true, factually correct, or editorially biased — only the linguistic balance of its wording. Use to flag articles for human review, not to certify them. LIMITATIONS: Detects tonal/linguistic balance only. Does NOT detect factual accuracy, propaganda presented in calm tone, or non-English/Romance language nuance reliably. Use as ONE signal among many — never as a verdict.",
     {
       title: z.string().max(300).describe("Article title"),
       text: z.string().min(50).max(20000).describe("Article text to analyze"),
@@ -156,7 +165,7 @@ export function registerCertificationTools(server: Server, getClient: () => ZPLE
   // --- zpl_review_bias: language-balance score for a review ---
   server.tool(
     "zpl_review_bias",
-    "Compute a language-balance score (AIN) for a single review: the wording's positive/negative/hedging mix relative to the star rating. A low score means the wording is one-sided. Does NOT determine if the review is fake, paid, or untruthful — only that the wording is unbalanced. Use to flag reviews for moderation, not to certify them as inauthentic.",
+    "Compute a language-balance score (AIN) for a single review: the wording's positive/negative/hedging mix relative to the star rating. A low score means the wording is one-sided. Does NOT determine if the review is fake, paid, or untruthful — only that the wording is unbalanced. Use to flag reviews for moderation, not to certify them as inauthentic. LIMITATIONS: Detects tonal/linguistic balance only. Does NOT detect factual accuracy, propaganda presented in calm tone, or non-English/Romance language nuance reliably. Use as ONE signal among many — never as a verdict.",
     {
       product: z.string().max(200).describe("Product/service being reviewed"),
       review_text: z.string().min(20).max(5000).describe("The review text"),
