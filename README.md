@@ -4,7 +4,9 @@ Model Context Protocol (MCP) server for the **Zero Point Logic Engine** — a po
 
 Connects any MCP-compatible AI client (Claude Desktop, Claude Code, Cursor, Windsurf, etc.) to the ZPL Engine API for real-time bias detection, stability scoring, and neutrality analysis across multiple domains.
 
-**56 tools** across 9 categories: Finance, Gaming, AI/ML, Security, Crypto, Certification, Advanced, Universal, and Meta.
+**51 tools** across 9 categories: Finance, Gaming, AI/ML, Security, Crypto, Certification, Advanced, Universal, and Meta.
+
+> **v3.0.0 BREAKING:** Removed 5 tools that created false-authority risk: `zpl_ask`, `zpl_certify`, `zpl_certificate`, `zpl_predict`, `zpl_auto_certify`. AIN is a STABILITY measurement only — never a prediction or recommendation.
 
 ## What is ZPL Engine?
 
@@ -101,20 +103,30 @@ npm run build
 
 Add to your MCP configuration following the respective IDE's documentation, with the same command/args/env structure.
 
-## Tool Categories (56 tools)
+## Tool Categories (51 tools)
 
 | Category | Tools | Examples |
 |----------|-------|---------|
-| **Core** | 7 | `zpl_compute`, `zpl_analyze`, `zpl_sweep`, `zpl_ask`, `zpl_domains`, `zpl_health`, `zpl_plans` |
+| **Core** | 6 | `zpl_compute`, `zpl_analyze`, `zpl_sweep`, `zpl_domains`, `zpl_health`, `zpl_plans` |
 | **Finance** | 8 | `zpl_portfolio`, `zpl_risk_score`, `zpl_market_scan`, `zpl_forex_pair`, `zpl_fear_greed`, `zpl_sector_bias`, `zpl_macro`, `zpl_correlation` |
 | **Gaming** | 6 | `zpl_economy_check`, `zpl_loot_table`, `zpl_matchmaking`, `zpl_gacha_audit`, `zpl_pvp_balance`, `zpl_leaderboard` |
 | **AI/ML** | 4 | `zpl_model_bias`, `zpl_dataset_audit`, `zpl_prompt_test`, `zpl_benchmark` |
 | **Security** | 3 | `zpl_vuln_map`, `zpl_risk_score`, `zpl_compliance` |
 | **Crypto** | 4 | `zpl_whale_check`, `zpl_defi_risk`, `zpl_liquidity`, `zpl_tokenomics` |
-| **Certification** | 6 | `zpl_certify`, `zpl_debate`, `zpl_news_bias`, `zpl_review_bias`, `zpl_auto_certify`, `zpl_check_response` |
-| **Advanced** | 10 | `zpl_simulate`, `zpl_predict`, `zpl_versus`, `zpl_chart`, `zpl_alert`, `zpl_watchlist`, `zpl_certificate`, `zpl_report`, `zpl_teach`, `zpl_rng_test` |
-| **Universal** | 4 | `zpl_decide`, `zpl_compare`, `zpl_rank`, `zpl_explain` |
-| **Meta** | 4 | `zpl_batch`, `zpl_export`, `zpl_usage`, `zpl_account` |
+| **Certification** | 3 | `zpl_debate`, `zpl_news_bias`, `zpl_review_bias` |
+| **Advanced** | 7 | `zpl_simulate`, `zpl_versus`, `zpl_chart`, `zpl_alert`, `zpl_watchlist`, `zpl_report`, `zpl_teach`, `zpl_rng_test` |
+| **Universal** | 5 | `zpl_decide`, `zpl_compare`, `zpl_rank`, `zpl_explain`, `zpl_check_response` |
+| **Meta** | 5 | `zpl_batch`, `zpl_export`, `zpl_usage`, `zpl_account`, `zpl_history` |
+
+### v3.0.0 Removed Tools (and why)
+
+| Removed | Why | Replacement |
+|---------|-----|-------------|
+| `zpl_ask` | Accepted user-provided scores → returned "official AIN" → false authority risk | `zpl_decide`, `zpl_compare`, `zpl_rank` |
+| `zpl_certify` | Generated "ZPL Certified" badge on arbitrary text → scam-tool risk | `zpl_check_response` (raw bias score, no certification claim) |
+| `zpl_certificate` | Generated "Certificate ID" + grades A+/F → enabled fake ZPL endorsements | None — manual review only |
+| `zpl_predict` | Name implies prediction; users misused for stock/lottery "predictions" | `zpl_chart` (historical visualization, no forecast) |
+| `zpl_auto_certify` | Forced AIN badge on every Claude response → spam + false authority at scale | None — explicit user requests only |
 
 ### Quick Examples
 
@@ -209,14 +221,14 @@ The MCP server **never** sees or contains the engine formula. It sends `(d, bias
 - Fail-fast startup if `ZPL_API_KEY` is not set
 - Local history sanitizes API key prefixes before writing
 
-## IP Protection (v2.2.0+)
+## IP Protection (v3.0.0+)
 
 The ZPL Engine computation method is a trade secret of Zero Point Logic. This MCP has been hardened to never expose it:
 
 - Tool outputs return **AIN score + status + tokens used only**. No bias, deviation, p-output, dimension, or timing values are exposed.
-- `zpl_ask` rejects questions that probe for the formula, algorithm, method, source, internals, or any IP-related terms.
 - The MCP never receives or processes the engine formula — it sends `(d, bias, samples)` to the server and receives `(ain, status)` back.
 - All computation happens server-side on the proprietary engine. The client-side code contains no algorithmic secrets.
+- v3.0 removed tools that allowed user-provided scores to be presented as official AIN measurements (false authority risk).
 
 ## License
 

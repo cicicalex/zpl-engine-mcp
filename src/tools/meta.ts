@@ -94,7 +94,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
       const limit = rawLimit ?? 50;
       const history = getHistory(limit);
       if (history.length === 0) {
-        return { content: [{ type: "text" as const, text: "No history to export. Run some analyses first (zpl_ask, zpl_compute, zpl_analyze, etc.)." }] };
+        return { content: [{ type: "text" as const, text: "No history to export. Run some analyses first (zpl_compute, zpl_analyze, zpl_portfolio, etc.)." }] };
       }
 
       if (format === "json") {

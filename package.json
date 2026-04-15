@@ -1,7 +1,7 @@
 {
   "name": "zpl-engine-mcp",
-  "version": "2.3.0",
-  "description": "The world's first mathematical neutrality engine. 56 tools across finance, gaming, AI/ML, security, crypto, certification, and more. AIN scoring (0.1–99.9) for bias detection, risk analysis, and balance verification.",
+  "version": "3.0.0",
+  "description": "Mathematical stability engine. 51 tools for measuring balance and bias in finance, gaming, AI/ML, security, and crypto data. AIN score (0.1-99.9) is a STABILITY measurement, not a prediction or recommendation. v3.0 BREAKING: removed zpl_ask, zpl_certify, zpl_certificate, zpl_predict, zpl_auto_certify (false-authority risk).",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

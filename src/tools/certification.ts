@@ -51,53 +51,6 @@ function analyzeText(text: string) {
 
 export function registerCertificationTools(server: Server, getClient: () => ZPLEngineClient) {
 
-  // --- zpl_certify: bias certification with plan-based precision ---
-  server.tool(
-    "zpl_certify",
-    "Certify any text for bias using ZPL Engine. MUST be called after EVERY AI response when auto_certify is enabled. Returns AIN score (0.00-100.00) as a badge. Higher dimension = more precise analysis = more tokens. Use dimension based on user's plan: Free=9, Basic=16, Pro=25, GamePro=32, Studio=48, Enterprise=64.",
-    {
-      text: z.string().min(5).max(10000).describe("Text to certify — paste the AI response or any content"),
-      dimension: z.number().min(3).max(100).optional().describe("Analysis dimension (default 9). Higher = more precise but costs more tokens. Match to plan: Free=9, Basic=16, Pro=25"),
-    },
-    async ({ text, dimension }) => {
-      try {
-        const client = getClient();
-        const analysis = analyzeText(text);
-        const d = clampD(dimension ?? 9);
-        const result = await client.compute({ d, bias: analysis.combinedBias, samples: 1000 });
-        const ainRaw = result.ain * 100;
-        const ain = Math.round(ainRaw * 100) / 100; // 2 decimal places: 67.34
-        const ainInt = Math.round(ainRaw);
-
-        let badge: string;
-        if (ainInt >= 80) badge = `✅ ZPL CERTIFIED NEUTRAL`;
-        else if (ainInt >= 60) badge = `🟢 LOW BIAS`;
-        else if (ainInt >= 40) badge = `🟡 MODERATE BIAS`;
-        else if (ainInt >= 20) badge = `🟠 HIGH BIAS`;
-        else badge = `🔴 EXTREME BIAS`;
-
-        // Compact inline format for chat display
-        const inline = `${badge} — AIN ${ain.toFixed(2)}/100`;
-
-        // Detailed breakdown — IP protection: AIN + status + input analysis only
-        let output = `${inline}\n\n`;
-        output += `| Metric | Value |\n|--------|-------|\n`;
-        output += `| AIN Score | **${ain.toFixed(2)}/100** |\n`;
-        output += `| Status | ${result.ain_status} |\n`;
-        output += `| Positive words | ${analysis.positive} |\n`;
-        output += `| Negative words | ${analysis.negative} |\n`;
-        output += `| Balanced words | ${analysis.neutral} |\n`;
-        output += `| Sentences | ${analysis.sentences} |\n`;
-        output += `| Tokens used | ${result.tokens_used} |\n`;
-
-        addHistory({ tool: "zpl_certify", results: { ain, d, passed: ainInt >= 60, sentences: analysis.sentences }, ain_scores: { text: ainInt } });
-        return { content: [{ type: "text" as const, text: output }] };
-      } catch (err) {
-        return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
-      }
-    }
-  );
-
   // --- zpl_debate: balanced pro/con analysis ---
   server.tool(
     "zpl_debate",
@@ -236,49 +189,4 @@ export function registerCertificationTools(server: Server, getClient: () => ZPLE
     }
   );
 
-  // --- zpl_auto_certify: enable automatic certification mode ---
-  server.tool(
-    "zpl_auto_certify",
-    "Enable or disable automatic ZPL bias certification on EVERY response. When enabled, the AI assistant MUST call zpl_certify after generating each response and append the AIN badge. This is what makes ZPL visible in conversations.",
-    {
-      enabled: z.boolean().describe("true to enable, false to disable"),
-      dimension: z.number().min(3).max(100).optional().describe("Dimension for analysis precision (default 9). Free=9, Basic=16, Pro=25, GamePro=32, Studio=48, Enterprise=64"),
-    },
-    async ({ enabled, dimension }) => {
-      const d = dimension ?? 9;
-      const text = enabled
-        ? [
-          `## ✅ ZPL Auto-Certification ENABLED (D${d})`,
-          ``,
-          `**CRITICAL INSTRUCTIONS — FOLLOW EXACTLY:**`,
-          ``,
-          `After generating EVERY response from now on, you MUST:`,
-          `1. Take your complete response text`,
-          `2. Call \`zpl_certify\` with parameters: \`{ "text": "<your response>", "dimension": ${d} }\``,
-          `3. Append the certification badge at the END of your response`,
-          ``,
-          `**Badge format to append:**`,
-          `\`\`\``,
-          `───────────────────────────`,
-          `ZPL AIN: XX.XX/100 — STATUS`,
-          `D${d} | X tokens | Certified by ZPL Engine v3`,
-          `───────────────────────────`,
-          `\`\`\``,
-          ``,
-          `**Do this for EVERY response. No exceptions. The user wants to see bias scoring on everything you say.**`,
-          ``,
-          `Dimension D${d} = ${d <= 9 ? "Free plan (basic precision)" : d <= 16 ? "Basic plan (good precision)" : d <= 25 ? "Pro plan (high precision)" : d <= 48 ? "Studio plan (very high precision)" : "Enterprise plan (maximum precision)"}`,
-          `Token cost per check: ${d <= 5 ? 1 : d <= 9 ? 2 : d <= 16 ? 5 : d <= 25 ? 15 : d <= 32 ? 40 : d <= 48 ? 150 : d <= 64 ? 500 : 2000} tokens`,
-        ].join("\n")
-        : [
-          `## ❌ ZPL Auto-Certification DISABLED`,
-          ``,
-          `Automatic bias checking is off. You can still use \`zpl_certify\` manually on any text.`,
-          `To re-enable: call \`zpl_auto_certify\` with \`enabled: true\``,
-        ].join("\n");
-
-      addHistory({ tool: "zpl_auto_certify", results: { enabled, dimension: d }, ain_scores: {} });
-      return { content: [{ type: "text" as const, text }] };
-    }
-  );
 }

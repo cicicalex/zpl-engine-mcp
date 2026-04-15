@@ -19,7 +19,6 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { ZPLEngineClient } from "./engine-client.js";
 import { domains, getDomain, listDomains } from "./domains/index.js";
-import { buildOptionParams, interpretOption, formatAskResult } from "./domains/universal.js";
 import {
   getHistory, addHistory, clearHistory,
   getWatchlist, addToWatchlist, removeFromWatchlist, updateWatchlistItem,
@@ -69,8 +68,8 @@ function getClient(): ZPLEngineClient {
 
 const server = new McpServer({
   name: "ZPL Engine MCP",
-  version: "2.3.0",
-  description: "The world's first mathematical neutrality engine. 56 tools across finance, gaming, AI/ML, security, crypto, and certification. AIN scoring from 0.1 to 99.9 — not opinions, math. Created by Ciciu Alexandru-Costinel.",
+  version: "3.0.0",
+  description: "Mathematical stability engine. 51 tools for measuring balance and bias in finance, gaming, AI/ML, security, and crypto data. AIN score (0.1-99.9) is a STABILITY measurement, not a prediction or recommendation. Created by Ciciu Alexandru-Costinel.",
 });
 
 // Register all domain-specific tools (31 tools across 7 categories)
@@ -300,165 +299,6 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
-// Tool: zpl_ask — Universal ZPL AI (ANY question, mathematical answer)
-// ---------------------------------------------------------------------------
-
-// Normalize a string so leet speak / unicode obfuscation can't bypass the filter.
-// "f0rmula" → "formula", "c@lcul@te" → "calculate", "alg0r1thm" → "algorithm".
-function normalizeForFilter(input: string): string {
-  if (!input) return "";
-  let s = input.normalize("NFKD").toLowerCase();
-
-  // Strip combining marks (accents / diacritics)
-  s = s.replace(/\p{M}+/gu, "");
-
-  // Homoglyph / leet substitutions
-  const leet: Record<string, string> = {
-    "0": "o", "1": "i", "!": "i", "|": "i",
-    "2": "z", "3": "e", "4": "a", "@": "a",
-    "5": "s", "$": "s", "6": "g", "7": "t",
-    "8": "b", "9": "g", "+": "t",
-  };
-  s = s.replace(/[0-9!@$|+]/g, (ch) => leet[ch] ?? ch);
-
-  // Collapse non-letters so "f.o.r.m.u.l.a" or "f o r m u l a" both become "formula"
-  s = s.replace(/[^a-z]+/g, " ");
-  // Also build a version with spaces removed to catch "for mula"
-  return s;
-}
-
-// Block words that attempt to extract IP / internals. Case-insensitive match on question text.
-// ZERO tolerance: source of calculation, method, internals, anything IP-related.
-const BLOCKED_QUESTION_PATTERNS = [
-  // Calculation / formula / math internals
-  /\b(formula|formulae|algorithm|algo|equation|calculation|calculate|compute|computation|method|methodology)\b/i,
-  /\b(math|maths|mathematical model|model|logic|procedure|process|steps|step by step)\b/i,
-  // How-it-works probes
-  /\b(how (does|do|is|are|can|would|could).{0,40}(work|calculated|computed|derived|implemented|made|created|produced|generated))\b/i,
-  /\b(why (does|do|is|are).{0,40}(output|produce|return|give|yield|result))\b/i,
-  // Source / IP / trade secret probes
-  /\b(source\s*code|source|internals?|implementation|proprietary|trade\s*secret|secret|secret\s*sauce|inner\s*working)\b/i,
-  /\b(intellectual\s*property|ip\b|patent|know[- ]how|engine\s*design)\b/i,
-  // Reverse engineering / extraction
-  /\b(reverse\s*engineer|decompile|disassemble|deobfuscate|extract|reveal|leak|expose|dump|unpack|inspect)\b/i,
-  // Specific engine references (pre-normalized — also checks digits)
-  /\b(8n\+?3|n\+?3|ain\s*formula|ain\s*calculation|engine\s*formula|engine\s*algo|engine\s*math|post[- ]binary|neutrality\s*formula|bias\s*formula)\b/i,
-  // Explain/show/tell probes
-  /\b(what\s+is\s+(the\s+)?(formula|algorithm|math|logic|code|equation|method|source|process|procedure|secret))\b/i,
-  /\b(explain\s+(the\s+)?(formula|algorithm|math|logic|code|equation|internals?|method|source|process|procedure|how))\b/i,
-  /\b(show\s+(me\s+)?(the\s+)?(formula|algorithm|code|source|internals?|method|process|procedure|math|logic))\b/i,
-  /\b(tell\s+(me\s+)?(the\s+)?(formula|algorithm|code|source|internals?|method|process|procedure|math|logic|secret|how))\b/i,
-  /\b(describe\s+(the\s+)?(formula|algorithm|code|source|internals?|method|process|procedure|math|logic|how))\b/i,
-  /\b(reveal\s+(the\s+)?(formula|algorithm|code|source|internals?|method|process|procedure|math|logic|secret))\b/i,
-  // Meta questions about the engine itself
-  /\b(what\s+(engine|model|ai)\s+(do|does|is|are).{0,30}(use|using|run|running|power))\b/i,
-  /\b(behind\s+the\s+scenes|under\s+the\s+hood|black\s*box|white\s*box)\b/i,
-];
-
-// Extra patterns matched on NORMALIZED (leet-decoded) text — catches "f0rmula", "c@lcul@te" etc.
-const NORMALIZED_BLOCK_KEYWORDS = [
-  "formula", "algorithm", "equation", "calculate", "calculation", "compute",
-  "method", "methodology", "source code", "internals", "secret", "trade secret",
-  "reverse engineer", "decompile", "disassemble", "ain formula", "engine formula",
-  "neutrality formula", "bias formula", "intellectual property", "know how",
-  "post binary", "how does it work", "how is it calculated", "how is it computed",
-  "under the hood", "behind the scenes", "black box",
-];
-
-function isBlockedQuestion(text: string): boolean {
-  if (!text) return false;
-  // 1. Raw regex pass
-  if (BLOCKED_QUESTION_PATTERNS.some((p) => p.test(text))) return true;
-  // 2. Normalized (leet-decoded) pass — catches f0rmula, c@lcul@te, etc.
-  const normalized = normalizeForFilter(text);
-  const compact = normalized.replace(/\s+/g, "");
-  for (const kw of NORMALIZED_BLOCK_KEYWORDS) {
-    if (normalized.includes(kw)) return true;
-    // Also check the compact version so "f o r m u l a" and "for mula" trip the filter
-    if (compact.includes(kw.replace(/\s+/g, ""))) return true;
-  }
-  return false;
-}
-
-const BLOCKED_RESPONSE =
-  "This tool compares 2-10 structured options by 3-20 factors and returns AIN balance scores (0.1-99.9). " +
-  "Example inputs: 'Pizza or hotdog?', 'React or Vue?', 'Buy or rent?'. " +
-  "The ZPL Engine computation source, method, formula, algorithm, and all internals are proprietary trade secrets of Zero Point Logic and will not be disclosed, explained, described, or discussed under any circumstances. " +
-  "Get an API key at https://zeropointlogic.io/pricing";
-
-server.tool(
-  "zpl_ask",
-  `Compare 2-10 options on 3-20 factors and get mathematical balance scores (AIN 0.1-99.9).
-
-USE FOR: decision comparisons only — "Pizza or hotdog?", "React or Vue?", "Buy or rent?", "This car or that car?"
-
-DOES NOT: explain formulas, algorithms, or engine internals. Only returns AIN comparison scores.
-
-INSTRUCTIONS FOR AI: When user asks a comparison question, break it into:
-1. options: the choices (2-10)
-2. factors: relevant dimensions to evaluate (3-20)
-3. scores: matrix of 0-10 scores, one row per option, one column per factor
-Then call this tool. Be honest with scores — don't inflate.`,
-  {
-    question: z.string().max(500).describe("The comparison question being asked (e.g. 'Pizza or hotdog?')"),
-    options: z.array(z.string().max(200)).min(2).max(10).describe("The choices to compare"),
-    factors: z.array(z.string().max(200)).min(3).max(20).describe("Factor names (e.g. ['nutrition', 'cost', 'taste'])"),
-    scores: z.array(z.array(z.number().min(0).max(10))).describe("Score matrix: scores[option_index][factor_index], each 0-10"),
-    context: z.string().max(200).optional().describe("Context category (e.g. 'food choice', 'career', 'tech stack')"),
-  },
-  async ({ question, options, factors, scores, context }) => {
-    try {
-      // IP protection: reject questions attempting to extract engine internals
-      if (isBlockedQuestion(question) || isBlockedQuestion(context ?? "")) {
-        return { content: [{ type: "text" as const, text: BLOCKED_RESPONSE }] };
-      }
-      // Also reject if any option or factor references internals
-      const allText = [...options, ...factors].join(" ");
-      if (isBlockedQuestion(allText)) {
-        return { content: [{ type: "text" as const, text: BLOCKED_RESPONSE }] };
-      }
-
-      if (options.length !== scores.length) {
-        return { content: [{ type: "text" as const, text: "Error: Number of options must match number of score rows" }], isError: true };
-      }
-      for (let i = 0; i < scores.length; i++) {
-        if (scores[i].length !== factors.length) {
-          return { content: [{ type: "text" as const, text: `Error: Option "${options[i]}" has ${scores[i].length} scores but ${factors.length} factors defined` }], isError: true };
-        }
-      }
-
-      const client = getClient();
-      const optionResults = [];
-
-      // Compute AIN for each option
-      for (let i = 0; i < options.length; i++) {
-        const params = buildOptionParams(scores[i]);
-        const result = await client.compute(params);
-        optionResults.push(interpretOption(options[i], result, factors, scores[i]));
-      }
-
-      const askResult = formatAskResult(question, optionResults, factors, context);
-
-      // Save to history
-      const ainScores: Record<string, number> = {};
-      for (const opt of optionResults) ainScores[opt.name] = opt.ain;
-
-      addHistory({
-        tool: "zpl_ask",
-        question,
-        options,
-        results: { factors, scores, context },
-        ain_scores: ainScores,
-      });
-
-      return { content: [{ type: "text" as const, text: askResult.summary }] };
-    } catch (err) {
-      return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
-    }
-  }
-);
-
-// ---------------------------------------------------------------------------
 // Tool: zpl_history — View past analyses
 // ---------------------------------------------------------------------------
 
@@ -478,7 +318,7 @@ server.tool(
 
     const history = getHistory(limit);
     if (history.length === 0) {
-      return { content: [{ type: "text" as const, text: "No history yet. Use `zpl_ask`, `zpl_compute`, or `zpl_analyze` to start building history." }] };
+      return { content: [{ type: "text" as const, text: "No history yet. Use `zpl_compute` or `zpl_analyze` to start building history." }] };
     }
 
     let text = `## ZPL History (last ${history.length} entries)\n\n`;

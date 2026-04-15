@@ -154,145 +154,6 @@ Powerful for risk planning, game balancing, portfolio stress testing.`,
     }
   );
 
-  // --- zpl_certificate: generate ZPL Certified badge ---
-  server.tool(
-    "zpl_certificate",
-    `Generate a "ZPL Certified" neutrality certificate for a game, model, protocol, or system. Runs a comprehensive analysis and issues a certificate with AIN score, grade, and timestamp.
-
-Grades: A+ (90-99.9), A (80-89), B (60-79), C (40-59), D (20-39), F (0-19)
-Use this to certify game balance, AI fairness, token distribution, or any system's neutrality.`,
-    {
-      subject: z.string().max(200).describe("What is being certified (e.g. 'Legends of Aria — Loot System')"),
-      category: z.string().max(50).describe("Category: 'game-balance', 'ai-fairness', 'token-distribution', 'market-stability', 'security-posture', 'custom'"),
-      values: z.array(z.number()).min(3).max(50).describe("The data to certify (distribution values, scores, metrics)"),
-      certified_by: z.string().max(200).optional().describe("Organization requesting certification"),
-    },
-    async ({ subject, category, values, certified_by }) => {
-      try {
-        const client = getClient();
-        const d = clampD(values.length);
-        const bias = distributionBias(values);
-
-        // Run with high samples for certification accuracy
-        const result = await client.compute({ d, bias, samples: 5000 });
-        const ain = Math.round(result.ain * 100);
-
-        // Grade
-        let grade: string;
-        let verdict: string;
-        if (ain >= 90) { grade = "A+"; verdict = "EXCEPTIONAL — Certified Neutral"; }
-        else if (ain >= 80) { grade = "A"; verdict = "EXCELLENT — Certified Neutral"; }
-        else if (ain >= 70) { grade = "B+"; verdict = "GOOD — Certified with minor notes"; }
-        else if (ain >= 60) { grade = "B"; verdict = "ACCEPTABLE — Certified with recommendations"; }
-        else if (ain >= 40) { grade = "C"; verdict = "BELOW STANDARD — Not certified, improvements needed"; }
-        else if (ain >= 20) { grade = "D"; verdict = "POOR — Failed certification"; }
-        else { grade = "F"; verdict = "CRITICAL — Failed certification, major issues"; }
-
-        const passed = ain >= 60;
-        const now = new Date();
-        const certId = `ZPL-CERT-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-
-        let text = `\n`;
-        text += `╔══════════════════════════════════════════════════════╗\n`;
-        text += `║                                                      ║\n`;
-        text += `║           ZERO POINT LOGIC — CERTIFICATE             ║\n`;
-        text += `║                                                      ║\n`;
-        text += `║   ${passed ? "CERTIFIED NEUTRAL" : "CERTIFICATION FAILED"}                             ║\n`;
-        text += `║                                                      ║\n`;
-        text += `║   Subject: ${subject.slice(0, 42).padEnd(42)} ║\n`;
-        text += `║   Category: ${category.slice(0, 41).padEnd(41)} ║\n`;
-        text += `║                                                      ║\n`;
-        text += `║   ┌────────────────────────────────┐                 ║\n`;
-        text += `║   │  AIN Score:  ${String(ain).padStart(3)}/100             │                 ║\n`;
-        text += `║   │  Grade:      ${grade.padEnd(20)} │                 ║\n`;
-        text += `║   │  Status:     ${result.ain_status.padEnd(20)}│                 ║\n`;
-        text += `║   └────────────────────────────────┘                 ║\n`;
-        text += `║                                                      ║\n`;
-        text += `║   Verdict: ${verdict.slice(0, 42).padEnd(42)} ║\n`;
-        text += `║                                                      ║\n`;
-        text += `║   Certificate ID: ${certId}                  ║\n`;
-        text += `║   Date: ${now.toISOString().slice(0, 10)}                                    ║\n`;
-        if (certified_by) {
-          text += `║   Requested by: ${certified_by.slice(0, 36).padEnd(36)} ║\n`;
-        }
-        text += `║                                                      ║\n`;
-        text += `║   Powered by ZPL Engine v0.1.0                       ║\n`;
-        text += `║   Created by Ciciu Alexandru-Costinel                 ║\n`;
-        text += `║   https://zeropointlogic.io                          ║\n`;
-        text += `║                                                      ║\n`;
-        text += `╚══════════════════════════════════════════════════════╝\n`;
-
-        addHistory({ tool: "zpl_certificate", results: { subject, category, grade, passed, certId }, ain_scores: { [subject]: ain } });
-        return { content: [{ type: "text" as const, text }] };
-      } catch (err) {
-        return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
-      }
-    }
-  );
-
-  // --- zpl_predict: stability trend prediction ---
-  server.tool(
-    "zpl_predict",
-    `Predict stability trend from historical data. Provide a time series (3+ data points). The engine analyzes whether the system is becoming more stable, less stable, or flat — and how confident the prediction is.
-
-Not a price predictor — predicts STABILITY trajectory.`,
-    {
-      series: z.array(z.number()).min(3).max(100).describe("Time series data points (chronological order)"),
-      label: z.string().max(200).optional().describe("What this data represents"),
-      window: z.number().int().min(2).max(20).optional().default(3).describe("Analysis window size"),
-    },
-    async ({ series, label, window }) => {
-      try {
-        const client = getClient();
-        const name = label ?? "Series";
-
-        // Compute AIN for sliding windows
-        const ains: number[] = [];
-        for (let i = 0; i <= series.length - window; i++) {
-          const slice = series.slice(i, i + window);
-          const d = clampD(slice.length);
-          const bias = directionalBias(slice);
-          const r = await client.compute({ d, bias, samples: 500 });
-          ains.push(Math.round(r.ain * 100));
-        }
-
-        // Trend analysis
-        const firstHalf = ains.slice(0, Math.floor(ains.length / 2));
-        const secondHalf = ains.slice(Math.floor(ains.length / 2));
-        const avgFirst = firstHalf.reduce((s, v) => s + v, 0) / firstHalf.length;
-        const avgSecond = secondHalf.reduce((s, v) => s + v, 0) / secondHalf.length;
-        const trend = avgSecond - avgFirst;
-
-        let trendLabel: string;
-        if (trend > 10) trendLabel = "STABILIZING — getting more neutral over time";
-        else if (trend > 3) trendLabel = "SLIGHTLY IMPROVING — minor stability gain";
-        else if (trend > -3) trendLabel = "FLAT — stability unchanged";
-        else if (trend > -10) trendLabel = "SLIGHTLY DECLINING — minor stability loss";
-        else trendLabel = "DESTABILIZING — losing neutrality over time";
-
-        let text = `## Stability Prediction: ${name}\n\n`;
-        text += `**Trend:** ${trendLabel}\n`;
-        text += `**Direction:** ${trend > 0 ? "+" : ""}${trend.toFixed(1)} AIN (first half → second half)\n\n`;
-
-        // AIN over time
-        text += `### AIN Over Time\n\n`;
-        text += `| Window | AIN | Status |\n|--------|-----|--------|\n`;
-        for (let i = 0; i < ains.length; i++) {
-          text += `| ${i + 1} | ${ains[i]}/100 | ${ainSignal(ains[i])} |\n`;
-        }
-
-        text += `\n**Latest AIN:** ${ains[ains.length - 1]}/100\n`;
-        text += `**Windows analyzed:** ${ains.length}\n`;
-        text += `**Tokens used:** ${ains.length} computations`;
-
-        addHistory({ tool: "zpl_predict", results: { label, trend: trendLabel }, ain_scores: { latest: ains[ains.length - 1], trend: Math.round(trend) } });
-        return { content: [{ type: "text" as const, text }] };
-      } catch (err) {
-        return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
-      }
-    }
-  );
-
   // --- zpl_leaderboard: top stable/unstable from history ---
   server.tool(
     "zpl_leaderboard",
@@ -362,7 +223,7 @@ Not a price predictor — predicts STABILITY trajectory.`,
     "zpl_chart",
     "Generate an ASCII chart showing AIN scores over time from your analysis history. Visual stability tracking directly in the terminal.",
     {
-      filter_tool: z.string().max(50).optional().describe("Filter by tool name (e.g. 'zpl_compute', 'zpl_ask')"),
+      filter_tool: z.string().max(50).optional().describe("Filter by tool name (e.g. 'zpl_compute', 'zpl_analyze')"),
       height: z.number().int().min(5).max(20).optional().default(10).describe("Chart height in rows"),
     },
     async ({ filter_tool, height }) => {
@@ -589,7 +450,7 @@ Add to your Claude Desktop config:
 ### 3. Start Using
 Just ask naturally:
 - "Is BTC stable?" → zpl_compute
-- "Pizza or hotdog?" → zpl_ask
+- "Pizza or hotdog?" → zpl_decide
 - "Is my loot table fair?" → zpl_loot_table
 - "Compare React vs Vue" → zpl_versus
 

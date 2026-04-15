@@ -1,6 +1,6 @@
 /**
- * Universal tools — 4 tools for any question/decision.
- * (zpl_ask already exists in index.ts, these are additional)
+ * Universal tools — balance/compare/rank/check across any domain.
+ * Stability measurement only — NOT predictions, NOT recommendations.
  */
 
 import { z } from "zod";
@@ -14,7 +14,7 @@ export function registerUniversalTools(server: Server, getClient: () => ZPLEngin
   // --- zpl_decide: quick 2-option decision ---
   server.tool(
     "zpl_decide",
-    "Quick decision helper for 2 options. Simpler than zpl_ask — just name two options and their pros/cons scores. Perfect for 'should I do A or B?' questions.",
+    "Compute a balance score (AIN) between 2 options based on their pros/cons. Returns a STABILITY measurement — not a recommendation. The user must interpret the result themselves.",
     {
       question: z.string().max(500).describe("The decision question"),
       option_a: z.string().max(200).describe("First option name"),
