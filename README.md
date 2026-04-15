@@ -4,10 +4,11 @@ Model Context Protocol (MCP) server for the **Zero Point Logic Engine** — a po
 
 Connects any MCP-compatible AI client (Claude Desktop, Claude Code, Cursor, Windsurf, etc.) to the ZPL Engine API for real-time bias detection, stability scoring, and neutrality analysis across multiple domains.
 
-**55 tools** across 9 categories: Finance, Gaming, AI/ML, Security, Crypto, Certification, Advanced, Universal, and Meta.
+**59 tools** (55 unique + 4 backwards-compat aliases) across 9 categories: Finance, Gaming, AI/ML, Security, Crypto, Certification, Advanced, Universal, and Meta.
 
-## What's new in v3.2.0
+## What's new in v3.3.0
 
+- **v3.3.0** — Added 4 clearer "balance"-prefixed aliases: `zpl_balance_check` (= `zpl_decide`), `zpl_balance_compare` (= `zpl_versus`), `zpl_balance_pair` (= `zpl_compare`), `zpl_balance_rank` (= `zpl_rank`). Both old and new names work; old names get a DEPRECATED note in their description. Existing users keep working without changes.
 - **v3.2.0** — 4 new tools: `zpl_about` (project info, no auth), `zpl_quota` (remaining tokens), `zpl_score_only` (minimal JSON for CI/CD), `zpl_validate_input` (free validation). Auto-update check, friendlier signup message, hard disclaimers on hypothetical/bias tools, RNG sample-size warnings, and bias tools re-framed as "language balance" instead of "fake/biased".
 - **v3.1.0** — Added `ZPL_MODE` env var (`pure` | `coach`). Pure mode hides AIN scores from the AI on text-evaluation tools (`zpl_check_response`, `zpl_news_bias`, `zpl_review_bias`) to prevent reactivity bias / observer effect.
 - **v3.0.0 (BREAKING)** — Removed 5 tools that created false-authority risk: `zpl_ask`, `zpl_certify`, `zpl_certificate`, `zpl_predict`, `zpl_auto_certify`. AIN is a STABILITY measurement only — never a prediction or recommendation.
@@ -118,7 +119,7 @@ npm run build
 
 Add to your MCP configuration following the respective IDE's documentation, with the same command/args/env structure.
 
-## Tool Categories (55 tools)
+## Tool Categories (59 tools)
 
 | Category | Tools | Examples |
 |----------|-------|---------|
@@ -129,8 +130,8 @@ Add to your MCP configuration following the respective IDE's documentation, with
 | **Security** | 3 | `zpl_vuln_map`, `zpl_risk_score`, `zpl_compliance` |
 | **Crypto** | 4 | `zpl_whale_check`, `zpl_defi_risk`, `zpl_liquidity`, `zpl_tokenomics` |
 | **Certification** | 3 | `zpl_debate`, `zpl_news_bias`, `zpl_review_bias` |
-| **Advanced** | 6 | `zpl_versus`, `zpl_simulate`, `zpl_leaderboard`, `zpl_chart`, `zpl_teach`, `zpl_alert` |
-| **Universal** | 5 | `zpl_decide`, `zpl_compare`, `zpl_rank`, `zpl_check_response`, `zpl_explain` |
+| **Advanced** | 6 | `zpl_simulate`, `zpl_leaderboard`, `zpl_chart`, `zpl_teach`, `zpl_alert`, `zpl_versus` (+ alias `zpl_balance_compare`) |
+| **Universal** | 5 | `zpl_check_response`, `zpl_explain`, `zpl_decide` (+ alias `zpl_balance_check`), `zpl_compare` (+ alias `zpl_balance_pair`), `zpl_rank` (+ alias `zpl_balance_rank`) |
 | **Meta** | 9 | `zpl_about`, `zpl_quota`, `zpl_score_only`, `zpl_validate_input`, `zpl_batch`, `zpl_export`, `zpl_usage`, `zpl_account`, `zpl_history` |
 
 ### New in v3.2: Meta tools
