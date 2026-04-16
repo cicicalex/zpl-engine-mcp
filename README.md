@@ -121,7 +121,9 @@ npm run build
 
 Add to your MCP configuration following the respective IDE's documentation, with the same command/args/env structure.
 
-## Tool Categories (59 tools)
+## Tool Categories (67 tools)
+
+Unique tool names: 63. With 4 backwards-compat aliases (`zpl_balance_*` pairs) the registered total is 67.
 
 | Category | Tools | Examples |
 |----------|-------|---------|
@@ -132,9 +134,10 @@ Add to your MCP configuration following the respective IDE's documentation, with
 | **Security** | 3 | `zpl_vuln_map`, `zpl_risk_score`, `zpl_compliance` |
 | **Crypto** | 4 | `zpl_whale_check`, `zpl_defi_risk`, `zpl_liquidity`, `zpl_tokenomics` |
 | **Certification** | 3 | `zpl_debate`, `zpl_news_bias`, `zpl_review_bias` |
-| **Advanced** | 6 | `zpl_simulate`, `zpl_leaderboard`, `zpl_chart`, `zpl_teach`, `zpl_alert`, `zpl_versus` (+ alias `zpl_balance_compare`) |
-| **Universal** | 5 | `zpl_check_response`, `zpl_explain`, `zpl_decide` (+ alias `zpl_balance_check`), `zpl_compare` (+ alias `zpl_balance_pair`), `zpl_rank` (+ alias `zpl_balance_rank`) |
-| **Meta** | 9 | `zpl_about`, `zpl_quota`, `zpl_score_only`, `zpl_validate_input`, `zpl_batch`, `zpl_export`, `zpl_usage`, `zpl_account`, `zpl_history` |
+| **Advanced** | 7 | `zpl_simulate`, `zpl_leaderboard`, `zpl_chart`, `zpl_teach`, `zpl_alert`, `zpl_versus` (+ alias `zpl_balance_compare`) |
+| **Universal** | 8 | `zpl_check_response`, `zpl_explain`, `zpl_decide` (+ alias `zpl_balance_check`), `zpl_compare` (+ alias `zpl_balance_pair`), `zpl_rank` (+ alias `zpl_balance_rank`) |
+| **Meta** | 8 | `zpl_about`, `zpl_quota`, `zpl_score_only`, `zpl_validate_input`, `zpl_batch`, `zpl_export`, `zpl_usage`, `zpl_account` |
+| **AI Eval** | 8 | `zpl_consistency_test`, `zpl_sycophancy_score`, `zpl_refusal_balance`, `zpl_language_equity`, `zpl_persona_drift`, `zpl_safety_boundary`, `zpl_hallucination_consistency`, `zpl_emotional_stability` |
 
 ### New in v3.2: Meta tools
 
@@ -211,13 +214,14 @@ Token cost depends on the dimension tier:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ZPL_API_KEY` | **Yes*** | — | Your API key (`zpl_u_...` or `zpl_s_...`). *Optional for `zpl_about` and `zpl_validate_input`. |
+| `ZPL_API_KEY` | **Yes*** | — | Your API key (`zpl_u_...` or `zpl_s_...` — 48 hex chars). *Optional for `zpl_about` and `zpl_validate_input`. Format is validated client-side. |
 | `ZPL_MODE` | No | `pure` | `pure` hides AIN from AI on text-eval tools; `coach` exposes it. See Modes above. |
 | `ZPL_ENGINE_URL` | No | `https://engine.zeropointlogic.io` | Custom engine URL |
-| `ZPL_RATE_LIMIT` | No | `60` | Max requests per minute |
+| `ZPL_RATE_LIMIT` | No | `60` | Max requests per minute (applies to `zpl_compute`, `zpl_sweep`, `zpl_analyze`) |
 | `ZPL_BUDGET_WARN` | No | `500` | Token budget warning threshold |
-| `ZPL_MAX_RETRIES` | No | `2` | Retry count for transient failures |
-| `ZPL_STORE_PATH` | No | `~/.zpl-engine/` | Local history storage path |
+| `ZPL_MAX_RETRIES` | No | `2` | Retry count for transient engine failures (5xx only) |
+| `ZPL_STORE_PATH` | No | `~/.zpl-engine/` | Local history storage path (legacy alias: `ZPL_STORE_DIR`). Must resolve inside `$HOME` or the OS tmp dir; otherwise falls back to default. |
+| `ANTHROPIC_API_KEY` | Only for AI Eval tools | — | Required for the 8 AI Eval tools (`zpl_consistency_test`, etc.). Session capped at 100 Claude calls per process. |
 
 ## Architecture
 

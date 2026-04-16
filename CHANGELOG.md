@@ -5,6 +5,61 @@ All notable changes to `zpl-engine-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.1] — 2026-04-16
+
+Bug-fix pass. No behaviour changes to documented APIs; all 67 tools preserved.
+
+### Fixed
+- `zpl_consistency_test` — inverted bias input to the engine. Previously the bias was folded around 0.5 (`bias > 0.5 ? 1-bias : bias`), which clipped the signal and made highly-inconsistent and highly-consistent responses produce similar AIN scores. Now the bias is `1 - distributionBias(groups)` so HIGH engine-bias (→ LOW AIN) correctly corresponds to spread-out response clusters.
+- AI Eval session budget double-counting. Each eval tool previously called `checkClaudeCallBudget(n)` at entry AND `sessionClaudeCalls += n` on success, charging 2× on happy paths. Now the budget is reserved up front inside `checkClaudeCallBudget` and the post-increment lines are removed — one charge per tool call.
+- `zpl_alert` budget check silently always returned "OK". It only credited entries whose `results.totalTokens` was a number, but almost no tool writes that field. It now uses the same per-op estimate as `zpl_quota`.
+- `zpl_validate_input` stack overflow risk on very large arrays (`Math.min(...values)` with 10k-element arrays can blow the arg-spread limit on some Node versions). Replaced with a single reduce loop.
+- Version-check cache file was PID-suffixed, so the 24h "skip if cached" guard never hit across restarts. Fixed name now.
+- Stale version strings: `zpl_account` was reporting `v2.1.0`, `zpl_report` was reporting `v1.0.0`. Both now track `package.json`.
+- `ZPL_STORE_PATH` from the README was not actually read — code only honoured `ZPL_STORE_DIR`. Both now work; `ZPL_STORE_PATH` takes precedence when set.
+- Store path validation now allows OS tmp directory too, not only `$HOME`, so containerised use cases work. Paths outside both still fall back to the default.
+- `zpl_export` CSV: embedded commas, quotes, or newlines in tool/domain/question fields are now escaped per RFC 4180 instead of breaking downstream parsers.
+
+### Changed (security)
+- `ZPL_API_KEY` format is validated client-side (`^zpl_[us]_[a-f0-9]{48}$`). Fails fast with a clear error instead of sending a malformed Authorization header to the engine — also reduces the risk of accidentally leaking an unrelated secret (Stripe key, etc.) if a user pastes the wrong value.
+- `zpl_sweep` and `zpl_analyze` now also honour the per-minute rate limiter (previously only `zpl_compute` was rate-limited).
+
+### Removed
+- `*Analyzed by ZPL Engine v3 — 8N+3 theorem*` footer from `zpl_check_response`. The reference hinted at engine internals; replaced with a plain `*Analyzed by ZPL Engine*`.
+
+## [3.4.0] — 2026-04-15
+
+AI Eval tools — 8 new tools for model behavioural consistency testing.
+
+### Added
+- `zpl_consistency_test` — run a prompt N times, score cluster consistency.
+- `zpl_sycophancy_score` — present a false claim, check if the model pushes back.
+- `zpl_refusal_balance` — mix safe + borderline + dangerous prompts, score refusal balance.
+- `zpl_language_equity` — ask the same question in N languages, compare response length.
+- `zpl_persona_drift` — multi-turn conversation with an assigned persona, detect character breaks.
+- `zpl_safety_boundary` — escalation prompts from safe → dangerous, score boundary sharpness.
+- `zpl_hallucination_consistency` — repeat factual questions at temperature 0, check if answers stay consistent.
+- `zpl_emotional_stability` — sentiment trajectory across a conversation.
+- `ANTHROPIC_API_KEY` env var — required only for AI Eval tools.
+- Session Claude-call cap of 100 per process to prevent budget drain (restart MCP to reset).
+
+### Changed
+- `zpl_news_bias` and `zpl_review_bias` now run a multilingual propaganda-detection pass (EN + RO + FR + DE + ES + IT) with a symmetric uniformity penalty: texts that are 100% positive OR 100% negative (regardless of language) trigger the same high-bias bonus.
+
+## [3.3.0] — 2026-04-15
+
+Clearer tool names via backwards-compat aliases.
+
+### Added
+- `zpl_balance_check` — alias for `zpl_decide`.
+- `zpl_balance_compare` — alias for `zpl_versus`.
+- `zpl_balance_pair` — alias for `zpl_compare`.
+- `zpl_balance_rank` — alias for `zpl_rank`.
+
+### Changed
+- Old names (`zpl_decide`, `zpl_versus`, `zpl_compare`, `zpl_rank`) marked DEPRECATED in their description but continue to work. No breaking change.
+- Registered tool count: 67 (63 unique + 4 aliases).
+
 ## [3.2.0] — 2026-04-15
 
 Onboarding tools + hard disclaimers + safety polish.
@@ -98,6 +153,9 @@ Removed 5 tools that created false-authority risk. AIN is a STABILITY measuremen
 ### Added
 - Initial ZPL Engine MCP server: 6 tools, 5 domain lenses.
 
+[3.4.1]: https://github.com/cicicalex/engine-mcp/releases/tag/v3.4.1
+[3.4.0]: https://github.com/cicicalex/engine-mcp/releases/tag/v3.4.0
+[3.3.0]: https://github.com/cicicalex/engine-mcp/releases/tag/v3.3.0
 [3.2.0]: https://github.com/cicicalex/engine-mcp/releases/tag/v3.2.0
 [3.1.0]: https://github.com/cicicalex/engine-mcp/releases/tag/v3.1.0
 [3.0.0]: https://github.com/cicicalex/engine-mcp/releases/tag/v3.0.0
