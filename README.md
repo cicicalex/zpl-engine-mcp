@@ -34,11 +34,33 @@ Connects any MCP-compatible AI client (Claude Desktop, Claude Code, Cursor, Wind
 - **v3.1.0** — Added `ZPL_MODE` env var (`pure` | `coach`). Pure mode hides AIN scores from the AI on text-evaluation tools (`zpl_check_response`, `zpl_news_bias`, `zpl_review_bias`) to prevent reactivity bias / observer effect.
 - **v3.0.0 (BREAKING)** — Removed 5 tools that created false-authority risk: `zpl_ask`, `zpl_certify`, `zpl_certificate`, `zpl_predict`, `zpl_auto_certify`. AIN is a STABILITY measurement only — never a prediction or recommendation.
 
-## Setup (free, 30 seconds)
+## Setup (free, 15 seconds)
 
-1. **Sign up** (free, 5,000 tokens/month — no credit card): [zeropointlogic.io/auth/register](https://zeropointlogic.io/auth/register)
-2. **Copy your `zpl_u_...` key** from [/dashboard](https://zeropointlogic.io/dashboard)
-3. **Add to your Claude Desktop config:**
+Run this in your terminal — it authenticates you, creates an API key, and
+writes your Claude Desktop config for you:
+
+```bash
+npx zpl-engine-mcp@latest setup
+```
+
+The wizard will:
+1. Open your browser to approve the CLI (sign up if you don't have an account — free, **5,000 tokens/month**, no credit card)
+2. Save the key to `~/.zpl/config.toml` (chmod 600)
+3. Patch your `claude_desktop_config.json` to add `zpl-engine-mcp` under `mcpServers`
+4. Print "Restart Claude Desktop to activate."
+
+That's it. Claude Desktop detected? Wizard adds the entry automatically.
+Using Claude Code / Cursor / Windsurf? The wizard prints the exact JSON
+snippet to paste into your client's MCP config.
+
+<details>
+<summary><strong>Manual setup (advanced)</strong></summary>
+
+If you can't run the wizard (air-gapped install, policy restriction, etc.):
+
+1. Sign up at [zeropointlogic.io/auth/register](https://zeropointlogic.io/auth/register) — free, 5,000 tokens/month, no credit card.
+2. Copy your `zpl_u_...` key from [/dashboard](https://zeropointlogic.io/dashboard).
+3. Add to your Claude Desktop config:
 
 ```json
 {
@@ -55,7 +77,8 @@ Connects any MCP-compatible AI client (Claude Desktop, Claude Code, Cursor, Wind
 }
 ```
 
-4. **Restart Claude Desktop.** Done.
+4. Restart Claude Desktop.
+</details>
 
 ## What is ZPL Engine?
 
