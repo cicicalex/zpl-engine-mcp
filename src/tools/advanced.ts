@@ -460,7 +460,7 @@ Created by Ciciu Alexandru-Costinel — published on Zenodo with DOI.`,
 
 | Plan | Price | Max D | Tokens/Month | Best For |
 |------|-------|-------|--------------|----------|
-| Free | $0 | d=9 | 5,000 | Testing, personal use |
+| Free | $0 | d=9 | 500 | Trial (~14 days), personal use |
 | Basic | $10/mo | d=16 | 10,000 | Indie developers |
 | Pro | $29/mo | d=25 | 50,000 | Small teams, analysts |
 | GamePro | $69/mo | d=32 | 150,000 | Game studios |
@@ -571,7 +571,7 @@ https://zeropointlogic.io`,
 }
 
 const PLAN_INFO: Record<string, { tokens: string }> = {
-  free: { tokens: "5,000" }, basic: { tokens: "10,000" }, pro: { tokens: "50,000" },
+  free: { tokens: "500" }, basic: { tokens: "10,000" }, pro: { tokens: "50,000" },
   gamepro: { tokens: "150,000" }, studio: { tokens: "500,000" }, agent: { tokens: "2,000,000" },
   enterprise: { tokens: "10,000,000" }, enterprise_xl: { tokens: "50,000,000" },
 };

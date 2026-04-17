@@ -27,7 +27,7 @@ Connects any MCP-compatible AI client (Claude Desktop, Claude Code, Cursor, Wind
 
 ## Setup (free, 30 seconds)
 
-1. **Sign up** (free, 5,000 tokens/month, no credit card): [zeropointlogic.io/auth/register](https://zeropointlogic.io/auth/register)
+1. **Sign up** (free, 500 tokens/month — about 14 days of light use, no credit card): [zeropointlogic.io/auth/register](https://zeropointlogic.io/auth/register)
 2. **Copy your `zpl_u_...` key** from [/dashboard](https://zeropointlogic.io/dashboard)
 3. **Add to your Claude Desktop config:**
 
@@ -188,7 +188,7 @@ All paid plans offer **20% discount with annual billing**.
 
 | Plan | Monthly | Annual | Max D | Tokens/mo | Keys |
 |------|---------|--------|-------|-----------|------|
-| Free | $0 | — | d=9 | 5,000 | 1 |
+| Free | $0 | — | d=9 | 500 | 1 |
 | Basic | $10/mo | $8/mo | d=16 | 10,000 | 1 |
 | Pro | $29/mo | $23/mo | d=25 | 50,000 | 3 |
 | GamePro | $69/mo | $55/mo | d=32 | 150,000 | 5 |
@@ -201,11 +201,11 @@ All paid plans offer **20% discount with annual billing**.
 
 Token cost depends on the dimension tier:
 
-| Dimension | Tokens/call | Sweep (19x) | Free plan (5K) |
-|-----------|-------------|-------------|----------------|
-| D3–D5 | 1 | 19 | 5,000 calls |
-| D6–D9 | 2 | 38 | 2,500 calls |
-| D10–D16 | 5 | 95 | 1,000 calls |
+| Dimension | Tokens/call | Sweep (19x) | Free plan (500) |
+|-----------|-------------|-------------|-----------------|
+| D3–D5 | 1 | 19 | 500 calls |
+| D6–D9 | 2 | 38 | 250 calls |
+| D10–D16 | 5 | 95 | 100 calls |
 | D17–D25 | 15 | 285 | — |
 | D26–D32 | 40 | 760 | — |
 | D33–D48 | 150 | 2,850 | — |

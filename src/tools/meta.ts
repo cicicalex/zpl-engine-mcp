@@ -13,7 +13,7 @@ import { getHistory, addHistory } from "../store.js";
 
 /** Plan details — MUST match constants.ts on ZPL Main website */
 const PLAN_INFO: Record<string, { price: string; annualPrice: string; maxD: number; tokens: string; rate: string; keys: number }> = {
-  free:          { price: "Free",     annualPrice: "—",        maxD: 9,   tokens: "5,000",      rate: "60/min", keys: 1 },
+  free:          { price: "Free",     annualPrice: "—",        maxD: 9,   tokens: "500",        rate: "60/min", keys: 1 },
   basic:         { price: "$10/mo",   annualPrice: "$8/mo",    maxD: 16,  tokens: "10,000",     rate: "60/min", keys: 1 },
   pro:           { price: "$29/mo",   annualPrice: "$23/mo",   maxD: 25,  tokens: "50,000",     rate: "60/min", keys: 3 },
   gamepro:       { price: "$69/mo",   annualPrice: "$55/mo",   maxD: 32,  tokens: "150,000",    rate: "60/min", keys: 5 },
@@ -59,7 +59,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
         "",
         "**Total tools:** 63 unique (+ 4 backwards-compat aliases = 67 registered) across 11 categories.",
         "",
-        "**Pricing:** Free plan = 5,000 tokens/month, no credit card.",
+        "**Pricing:** Free plan = 500 tokens/month (~14 days light use), no credit card. Paid plans from $10/mo.",
         "Sign up: https://zeropointlogic.io/auth/register",
         "",
         "**Author:** Ciciu Alexandru-Costinel",

@@ -1,6 +1,7 @@
 {
   "name": "zpl-engine-mcp",
   "version": "3.5.0",
+  "mcpName": "io.github.cicicalex/engine",
   "description": "v3.5.0: User-key only (ZPL_SERVICE_KEY removed). MCP requires zpl_u_ per-account keys so plan limits apply. 67 tools (63 unique + 4 aliases) across 11 categories. 8 AI Eval tools for model behavioral consistency (sycophancy, refusal balance, language equity, persona drift, safety boundary, hallucination, emotional stability). Mathematical stability engine for measuring balance and bias in finance, gaming, AI/ML, security, and crypto data. AIN is a STABILITY measurement only — never prediction or advice.",
   "type": "module",
   "main": "dist/index.js",

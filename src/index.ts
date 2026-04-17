@@ -680,7 +680,7 @@ async function main() {
     console.error("│    Welcome to ZPL Engine MCP — let's get you set up!       │");
     console.error("│                                                             │");
     console.error("│    You need a free API key to use the 63 ZPL tools.        │");
-    console.error("│    Free plan: 5,000 tokens / month. No credit card.        │");
+    console.error("│    Free plan: 500 tokens / month. No credit card.          │");
     console.error("│                                                             │");
     console.error("│    1. Get your key (10 seconds, no credit card):           │");
     console.error("│       https://zeropointlogic.io/auth/register              │");

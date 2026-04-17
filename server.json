@@ -1,0 +1,46 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.cicicalex/engine",
+  "description": "Mathematical stability & bias detection engine. Computes AIN (Neutrality Index) across finance, gaming, AI/ML, security, crypto, and text. 63 tools. AIN is a STABILITY measurement only — never prediction or advice. Paired with the zpl-cli companion for out-of-band AI evaluation (no observer effect).",
+  "repository": {
+    "url": "https://github.com/cicicalex/engine-mcp",
+    "source": "github"
+  },
+  "version": "3.5.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "zpl-engine-mcp",
+      "version": "3.5.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "ZPL_API_KEY",
+          "description": "User API key from zeropointlogic.io/dashboard/api-keys. Format: zpl_u_ + 48 hex chars. Service keys (zpl_s_) are rejected since v3.5.0.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "ZPL_MODE",
+          "description": "pure (default) hides AIN score from the AI on text-evaluation tools to prevent observer effect. coach exposes the score.",
+          "isRequired": false,
+          "default": "pure"
+        },
+        {
+          "name": "ZPL_ENGINE_URL",
+          "description": "Engine base URL. Defaults to https://engine.zeropointlogic.io.",
+          "isRequired": false,
+          "default": "https://engine.zeropointlogic.io"
+        },
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "description": "Only required for the 8 AI-eval tools (zpl_consistency_test, zpl_sycophancy_score, etc). Session capped at 100 Claude calls per process.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
