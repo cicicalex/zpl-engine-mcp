@@ -215,7 +215,7 @@ Token cost depends on the dimension tier:
 ## API Key Management
 
 - Keys are generated at [zeropointlogic.io/dashboard/api-keys](https://zeropointlogic.io/dashboard/api-keys)
-- Format: `zpl_u_` + 48 hex characters (user keys) or `zpl_s_` + 48 hex (service keys)
+- Format: `zpl_u_` + 48 hex characters (user keys). **v3.5.0+: the MCP only accepts user keys.** Service keys (`zpl_s_...`) are engine-to-engine only — server-side, IP-restricted, not MCP-usable.
 - Keys are SHA-256 hashed server-side — the plaintext is shown **once** at creation
 - **To rotate a key:** create a new key, update your MCP config, restart Claude, then delete the old key
 - If a key is compromised, delete it immediately from the dashboard — it's invalidated instantly
@@ -224,7 +224,7 @@ Token cost depends on the dimension tier:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ZPL_API_KEY` | **Yes*** | — | Your API key (`zpl_u_...` or `zpl_s_...` — 48 hex chars). *Optional for `zpl_about` and `zpl_validate_input`. Format is validated client-side. |
+| `ZPL_API_KEY` | **Yes*** | — | Your user API key (`zpl_u_...` — 48 hex chars). *Optional for `zpl_about` and `zpl_validate_input`. Format is validated client-side. Service keys (`zpl_s_...`) are rejected from v3.5.0 — they're engine-to-engine only and use IP allowlisting instead of plan limits. |
 | `ZPL_MODE` | No | `pure` | `pure` hides AIN from AI on text-eval tools; `coach` exposes it. See Modes above. |
 | `ZPL_ENGINE_URL` | No | `https://engine.zeropointlogic.io` | Engine base URL (must match host allowlist; see Security) |
 | `ZPL_ENGINE_HOST_ALLOWLIST` | No | — | Extra allowed hostnames (comma-separated), e.g. `staging.engine.example.com` for self-hosted engines |
