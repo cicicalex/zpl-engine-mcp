@@ -4,3 +4,6 @@ dist/
 *.tgz
 .smithery/
 *.log
+
+# Local agent-generated notes (never commit)
+PUBLISH_NOW.md
