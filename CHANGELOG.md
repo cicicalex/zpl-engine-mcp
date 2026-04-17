@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.6.1] — 2026-04-17
 
+### Fixed
+- **Setup wizard now clears Cloudflare challenge.** `npx zpl-engine-mcp setup`
+  used Node's default fetch User-Agent (`node`), which Cloudflare Bot Fight
+  Mode on `zeropointlogic.io` silently rejected with HTTP 403 — the wizard
+  printed "Could not contact zeropointlogic.io" and exited before ever
+  showing a device code. Every fetch from the wizard now sends
+  `Mozilla/5.0 (compatible; zpl-engine-mcp/<version>; +<repo URL>)`,
+  matching the bingbot/slackbot convention, so Bot Fight Mode passes it
+  through while we stay identifiable in server logs.
+
 ### Changed
 - **Free plan quota corrected to 5,000 tokens/month.** All copy (README,
   `zpl_about`, `zpl_plans`, `PLAN_INFO` tables) previously referenced
@@ -18,6 +28,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Token-cost table** in README now shows free-plan reachable calls:
   5,000 @ D3–D5 (1 tok/call), 2,500 @ D6–D9 (2 tok/call). D10+ requires
   Basic or higher (free is d=9 capped).
+
+### Notes for upgraders from v3.4.4
+This is the first npm publish after v3.4.4 — v3.5.0 and v3.6.0 were
+prepared in-repo but never shipped. Jumping from 3.4.4 directly to 3.6.1
+brings in:
+- **v3.5.0** — service keys (`zpl_s_...`) rejected at startup; MCP is now
+  user-key only (`zpl_u_...`).
+- **v3.6.0** — `npx zpl-engine-mcp setup` device-flow wizard writes
+  `~/.zpl/config.toml` and patches `claude_desktop_config.json` so
+  install-to-working takes ~15 seconds instead of 10+ minutes of
+  manual copy-paste.
+- **v3.6.1** — the two items above.
 
 ### No behavior change
 - MCP `zpl_plans` tool already reads `tokens_per_month` dynamically from

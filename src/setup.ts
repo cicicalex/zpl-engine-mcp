@@ -30,10 +30,19 @@ import { mkdir, writeFile, readFile, chmod, stat } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
+import { getMcpPackageVersion } from "./package-meta.js";
 
 const BACKEND_BASE = process.env.ZPL_BACKEND_URL ?? "https://zeropointlogic.io";
 const POLL_TIMEOUT_MS = 10 * 60 * 1000; // 10 min hard cap — matches device_code expiry
 const POLL_MAX_INTERVAL_MS = 10_000;    // cap interval_s so a stuck server doesn't stall us forever
+
+// Cloudflare Bot Fight Mode is enabled on zeropointlogic.io and blocks any
+// User-Agent that doesn't start with "Mozilla/". Node's default fetch UA
+// ("node") gets a 403 challenge page, which silently breaks the wizard.
+// Using the browser-compat "Mozilla/5.0 (compatible; ...)" pattern — same
+// convention used by well-behaved crawlers (bingbot, slackbot, etc.) — lets
+// us identify the tool while still clearing the challenge.
+const USER_AGENT = `Mozilla/5.0 (compatible; zpl-engine-mcp/${getMcpPackageVersion()}; +https://github.com/cicicalex/engine-mcp)`;
 
 // ---------------------------------------------------------------------------
 // Backend shape — mirrors /api/auth/cli/start and /api/auth/cli/status
@@ -133,7 +142,10 @@ function claudeDesktopConfigPath(): string {
 async function startDeviceFlow(): Promise<StartResponse> {
   const res = await fetch(`${BACKEND_BASE}/api/auth/cli/start`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": USER_AGENT,
+    },
     body: JSON.stringify({ client: "mcp" }),
     signal: AbortSignal.timeout(10_000),
   });
@@ -156,7 +168,10 @@ async function startDeviceFlow(): Promise<StartResponse> {
 
 async function pollStatus(deviceCode: string): Promise<StatusResponse> {
   const url = `${BACKEND_BASE}/api/auth/cli/status?device_code=${encodeURIComponent(deviceCode)}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  const res = await fetch(url, {
+    headers: { "User-Agent": USER_AGENT },
+    signal: AbortSignal.timeout(10_000),
+  });
   if (!res.ok) {
     // Surface as a pending-like object so the caller keeps polling on transient 5xx;
     // a final "expired" will end the loop correctly.
