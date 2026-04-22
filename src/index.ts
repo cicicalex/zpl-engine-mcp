@@ -70,10 +70,18 @@ const SAVE_HISTORY = process.env.ZPL_SAVE_HISTORY !== "false";
 function getClient(): ZPLEngineClient {
   if (!API_KEY) {
     throw new Error(
-      "ZPL API key not configured. Set ZPL_API_KEY (or ZPL_ENGINE_KEY).\n" +
-      "Create a user key at https://zeropointlogic.io/dashboard/api-keys\n" +
-      "(v3.5.0+: service keys `zpl_s_...` are NOT accepted by the MCP — " +
-      "use a per-user `zpl_u_...` key so plan limits apply per account.)"
+      "ZPL API key not configured.\n" +
+      "\n" +
+      "QUICK SETUP (15 seconds, recommended):\n" +
+      "  npx zpl-engine-mcp setup\n" +
+      "\n" +
+      "This opens your browser, you sign in with Google/GitHub or email,\n" +
+      "and it auto-configures Claude Desktop, Cursor, and Windsurf for you.\n" +
+      "Free plan: 5,000 tokens/month, no credit card.\n" +
+      "\n" +
+      "Manual alternative: set ZPL_API_KEY env var to a key from\n" +
+      "https://zeropointlogic.io/dashboard/api-keys (requires signup first).\n" +
+      "Must be a user key `zpl_u_...` — service keys `zpl_s_...` are rejected."
     );
   }
   if (isServiceKey(API_KEY)) {
@@ -84,14 +92,22 @@ function getClient(): ZPLEngineClient {
       "MCP clients (Claude Desktop, Claude Code, Cursor, etc.) must use\n" +
       "a USER key (`zpl_u_...`) so your usage is metered against your plan.\n" +
       "\n" +
-      "Create a user key:  https://zeropointlogic.io/dashboard/api-keys"
+      "QUICK FIX (15 seconds):\n" +
+      "  npx zpl-engine-mcp setup\n" +
+      "\n" +
+      "Or create a user key manually at:\n" +
+      "https://zeropointlogic.io/dashboard/api-keys"
     );
   }
   if (!isValidApiKeyFormat(API_KEY)) {
     throw new Error(
       "ZPL_API_KEY format invalid. Expected `zpl_u_<48 hex>` (54 chars total).\n" +
-      "This check runs client-side to avoid sending unrelated secrets to the engine.\n" +
-      "Get a correctly formatted key at https://zeropointlogic.io/dashboard/api-keys"
+      "\n" +
+      "Easiest fix:\n" +
+      "  npx zpl-engine-mcp setup\n" +
+      "\n" +
+      "This regenerates a correctly-formatted key and patches your config.\n" +
+      "Or manually: https://zeropointlogic.io/dashboard/api-keys"
     );
   }
   return new ZPLEngineClient(API_KEY, getValidatedEngineBaseUrl());
