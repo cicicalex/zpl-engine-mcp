@@ -1,0 +1,19 @@
+# Files NOT copied into the Docker build context. Keep this aligned with
+# package.json `files:` so the Docker image matches the npm tarball.
+node_modules
+src
+test
+docs
+.git
+.github
+.vscode
+*.tgz
+*.log
+*.md
+!README.md
+.env*
+coverage
+tsconfig*.json
+CHANGELOG.md
+RELEASE_NOTES_*.md
+PUBLISH_NOW.md
