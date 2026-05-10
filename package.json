@@ -2,7 +2,7 @@
   "name": "zpl-engine-mcp",
   "version": "4.0.0",
   "mcpName": "io.github.cicicalex/engine",
-  "description": "v4.0.0 MAJOR RELEASE: 21 bugs fixed including the critical wizard-key regex that left 0% of new installs functional. New: memory-aware setup (no forced re-login), `whoami` / `repair` / `diagnose` commands, `--force` / `--help` / `--version` flags, smoke test at setup completion, Cloudflare HTML detection, deduplication of legacy Claude Desktop entries, secret sanitizer fix (was leaking wizard prefixes + Anthropic keys), safety bounds on numeric env vars, token-cost tracking in 22 tools. 68 tools (64 unique + 4 aliases) across 11 categories. 146 tests (98 unit + 48 integration). Cross-OS verified Windows + Linux Alpine. Free plan: 5,000 tokens/month. User-key only. Mathematical stability engine for measuring balance and bias in finance, gaming, AI/ML, security, and crypto data. AIN is a STABILITY measurement only — never prediction or advice.",
+  "description": "MCP server for the ZPL stability engine — AIN bias detection & neutrality scoring for finance, gaming, AI/ML, security, crypto. 68 tools across 11 categories. Plug into Claude Desktop / Cursor / Windsurf in 10 seconds via `npx zpl-engine-mcp setup`. Free plan: 5000 tokens/month, no card. v4.0 ships memory-aware setup + diagnose/repair/whoami commands + 21 bug fixes + 146 tests + Cross-OS verified.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
