@@ -4,6 +4,8 @@
  * All computation happens server-side — this MCP never sees the formula.
  */
 
+import { sanitizeSecrets } from "./store.js";
+
 export interface ComputeRequest {
   d: number;       // dimension 3-100
   bias: number;    // 0.0-1.0
@@ -127,10 +129,15 @@ export async function parseEngineError(res: Response): Promise<string> {
     ].filter(Boolean).join("\n");
   }
 
-  // Standard JSON error path.
+  // Standard JSON error path. v4.1.0: sanitize the engine's `err.error` field
+  // before it propagates up to tool error responses. The engine SHOULDN'T put
+  // the user's API key in error bodies, but if it ever does (accidentally
+  // echoing back the Authorization header in a debug dump, e.g.), we don't
+  // want it landing in Claude Desktop's UI for the user (and possibly their
+  // chat-export logs) to read.
   try {
     const err = await res.json() as EngineError;
-    return `Engine error ${res.status}: ${err.error ?? res.statusText}`;
+    return sanitizeSecrets(`Engine error ${res.status}: ${err.error ?? res.statusText}`);
   } catch {
     return `Engine error ${res.status}: ${res.statusText}`;
   }

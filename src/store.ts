@@ -63,6 +63,30 @@ export interface HistoryEntry {
 const HISTORY_FILE = "history.json";
 const MAX_HISTORY = 500;
 
+/**
+ * Redact secret-shaped strings from any input. Same regex set as
+ * addHistory() previously inlined — extracted here in v4.1.0 so the SAME
+ * patterns can also be applied to tool error responses (index.ts) and to
+ * any future place an engine response body might echo a key back.
+ *
+ * Patterns:
+ *   - ZPL keys (legacy + wizard prefix variants): `zpl_[us]_(?:[a-z]+_)?<20+ hex>`
+ *   - Bearer tokens (Authorization header echoes)
+ *   - Anthropic / OpenAI sk-* (and sk-ant-* — note hyphens INSIDE the body)
+ *   - Stripe sk_live_* / sk_test_*
+ *   - Groq gsk_*
+ *
+ * Returns the input unchanged if it contains no matches. Idempotent.
+ */
+export function sanitizeSecrets(input: string): string {
+  return input
+    .replace(/zpl_[us]_(?:[a-z]+_)?[a-f0-9]{20,}/gi, "[REDACTED]")
+    .replace(/Bearer [^\s"]+/gi, "Bearer [REDACTED]")
+    .replace(/gsk_[A-Za-z0-9_-]+/gi, "[REDACTED]")
+    .replace(/sk-[A-Za-z0-9_-]+/gi, "[REDACTED]")
+    .replace(/sk_(?:live|test)_[A-Za-z0-9_-]+/gi, "[REDACTED]");
+}
+
 export function getHistory(limit = 50): HistoryEntry[] {
   const all = readJson<HistoryEntry[]>(HISTORY_FILE, []);
   return all.slice(-limit);
@@ -84,13 +108,7 @@ export function addHistory(entry: Omit<HistoryEntry, "id" | "timestamp">): Histo
   //    pattern stopped at first `-` and leaked the bulk of the key. Now
   //    includes `-` and `_` in the char class.
   //  - Stripe: sk_live_*, sk_test_* (also _ in char class)
-  const sanitized = JSON.parse(
-    JSON.stringify(entry).replace(/zpl_[us]_(?:[a-z]+_)?[a-f0-9]{20,}/gi, "[REDACTED]")
-      .replace(/Bearer [^\s"]+/gi, "Bearer [REDACTED]")
-      .replace(/gsk_[A-Za-z0-9_-]+/gi, "[REDACTED]")
-      .replace(/sk-[A-Za-z0-9_-]+/gi, "[REDACTED]")
-      .replace(/sk_(?:live|test)_[A-Za-z0-9_-]+/gi, "[REDACTED]")
-  );
+  const sanitized = JSON.parse(sanitizeSecrets(JSON.stringify(entry)));
 
   const full: HistoryEntry = {
     ...sanitized,

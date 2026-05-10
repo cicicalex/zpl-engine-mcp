@@ -680,6 +680,15 @@ async function checkLatestVersion(): Promise<"ok" | "block"> {
 }
 
 async function main() {
+  // v4.1.0: install proxy dispatcher BEFORE any module/code that uses fetch.
+  // EnvHttpProxyAgent reads HTTP_PROXY/HTTPS_PROXY/NO_PROXY env vars at this
+  // call. If we install later, the first fetch (e.g. update-check, setup
+  // device flow, eval-client) would already have been issued direct, defeating
+  // the corporate-proxy support. Idempotent + non-fatal on failure (falls
+  // back to direct connections with a stderr warning).
+  const { installProxyDispatcher } = await import("./proxy.js");
+  installProxyDispatcher();
+
   // v3.6.0: `npx zpl-engine-mcp setup` runs the device-flow wizard and exits.
   // Must be the very first thing main() does — before the version check so users
   // with an outdated install can still *run* setup to get a fresh key flow

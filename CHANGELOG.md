@@ -5,6 +5,40 @@ All notable changes to `zpl-engine-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0] — 2026-05-10
+
+Sister release to `zpl-engine-cli@1.1.0` — closes the same enterprise +
+compliance gaps in the MCP package so both clients reach feature parity
+on the things security teams + corporate IT care about.
+
+### Added
+
+- **HTTP_PROXY / HTTPS_PROXY / NO_PROXY support** — automatic. The MCP
+  now installs an `undici.EnvHttpProxyAgent` at boot (BEFORE any module
+  that uses fetch), so every engine call honours the standard proxy
+  env vars without the user reconfiguring anything. Enterprise users
+  behind a TLS-inspecting proxy can finally use the MCP. Disable with
+  `ZPL_NO_PROXY=1`.
+- **`SECURITY.md`** at the repo root — vulnerability disclosure policy
+  required for corporate procurement gates. Specifies the
+  `security@zeropointlogic.io` reporting address, response SLA, scope
+  in/out, and an itemised list of defences shipped by default with
+  pointers to the source.
+- **`sanitizeSecrets()` is now exported** from `src/store.ts`. Previously
+  the regex set was inlined in `addHistory()` only. Now it's reusable,
+  has its own JSDoc, and is called by `parseEngineError` so any 401/500
+  body the engine sends back is stripped of `zpl_u_*` / `zpl_s_*` /
+  `Bearer …` / `sk-…` / `gsk_…` / `sk_(live|test)_…` shapes BEFORE the
+  message bubbles up to the MCP client (and the user's chat scroll-back).
+
+### Why a minor bump (4.0 → 4.1) and not a patch
+
+Adding HTTP_PROXY support is technically backwards-compatible (no
+existing flag changes meaning) but it changes the network behaviour
+for any user who happened to have HTTP_PROXY set without realising
+the MCP was ignoring it. That's a behavioural shift — semver MINOR is
+the honest signal.
+
 ## [4.0.0] — 2026-05-10
 
 **MAJOR RELEASE.** Two months of incremental fixes consolidated into one
