@@ -5,6 +5,35 @@ All notable changes to `zpl-engine-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.2] — 2026-05-11
+
+Implements ADR 0002 (`zpl-engine-sdk/docs/adr/0002-x-zpl-client-headers.md`)
+in the MCP package. Coordination commit between SDK + MCP + CLI to give
+the engine reliable, parser-friendly client attribution that doesn't
+depend on regex-matching free-text User-Agent strings.
+
+### Added
+
+- **`X-ZPL-Client: mcp`** header on every engine request.
+- **`X-ZPL-Client-Version: <package version>`** header on every engine
+  request, sourced from `getMcpPackageVersion()` so it always tracks the
+  published npm version automatically.
+
+Both headers added to `engine-client.ts` `headers()` alongside the
+existing `Authorization` / `Content-Type` / `User-Agent`. `User-Agent`
+remains required for Cloudflare Bot Fight Mode compatibility — the new
+headers are independent identity markers for engine telemetry.
+
+### Compatibility
+
+- Backwards compatible: engine ignores unknown headers today; once Alex
+  ships engine-side persistence (E2 — `usage_log.client_type` /
+  `.client_version` columns), these headers populate the dashboard
+  automatically with no MCP redeploy needed.
+- SDK TypeScript + Python ship the same convention from
+  `zpl-engine-sdk` commit `d05dfd9`.
+- CLI (`zpl-engine-cli@1.1.3`) ships matching headers in the same wave.
+
 ## [4.1.1] — 2026-05-10
 
 Patch release surfacing two real bugs discovered during the v4.1.0 +

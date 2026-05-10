@@ -6,6 +6,7 @@
 
 import { sanitizeSecrets } from "./store.js";
 import { USER_AGENT } from "./user-agent.js";
+import { getMcpPackageVersion } from "./package-meta.js";
 
 export interface ComputeRequest {
   d: number;       // dimension 3-100
@@ -177,6 +178,14 @@ export class ZPLEngineClient {
       // for every user. parseEngineError correctly diagnosed it as
       // "User-Agent looks like a bot" — but the bot was us. Now fixed.
       "User-Agent": USER_AGENT,
+      // ADR 0002 (zpl-engine-sdk/docs/adr/0002-x-zpl-client-headers.md):
+      // structured client identity for engine telemetry (E2). Independent
+      // of User-Agent free text — middleware can reliably partition
+      // traffic by `X-ZPL-Client` instead of regex-matching UA strings.
+      // Engine persists into usage_log.client_type / .client_version
+      // when E2 ships (Alex / Rust). Until then, harmless to send.
+      "X-ZPL-Client": "mcp",
+      "X-ZPL-Client-Version": getMcpPackageVersion(),
     };
   }
 
