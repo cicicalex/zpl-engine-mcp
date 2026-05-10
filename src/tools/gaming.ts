@@ -45,7 +45,7 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
         else text += `\n**Verdict:** Heavy skew detected. Some items are almost impossible to get — likely to frustrate players.\n`;
 
         text += `**Tokens:** ${result.tokens_used}`;
-        addHistory({ tool: "zpl_loot_table", domain: "game", results: { game, items: items.map((i) => i.name) }, ain_scores: { loot: ain } });
+        addHistory({ tool: "zpl_loot_table", domain: "game", results: { game, items: items.map((i) => i.name), tokens_used: result.tokens_used }, ain_scores: { loot: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -97,7 +97,7 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
         else text += `**Verdict:** Unfair match. ${favoredTeam} heavily favored — consider re-matching.\n`;
 
         text += `**Tokens:** ${result.tokens_used}`;
-        addHistory({ tool: "zpl_matchmaking", domain: "game", results: { game, avgA, avgB }, ain_scores: { matchmaking: ain } });
+        addHistory({ tool: "zpl_matchmaking", domain: "game", results: { game, avgA, avgB, tokens_used: result.tokens_used }, ain_scores: { matchmaking: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -148,7 +148,7 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
         text += `\n**Summary:** ${inflating} inflating, ${draining} draining, ${resources.length - inflating - draining} balanced\n`;
         text += `**Tokens:** ${result.tokens_used}`;
 
-        addHistory({ tool: "zpl_economy_check", domain: "game", results: { game, resources: resources.map((r) => r.name) }, ain_scores: { economy: ain } });
+        addHistory({ tool: "zpl_economy_check", domain: "game", results: { game, resources: resources.map((r) => r.name), tokens_used: result.tokens_used }, ain_scores: { economy: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -194,7 +194,7 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
         text += `\n**Meta:** ${op} overpowered, ${weak} underpowered, ${sorted.length - op - weak} balanced\n`;
         text += `**Tokens:** ${result.tokens_used}`;
 
-        addHistory({ tool: "zpl_pvp_balance", domain: "game", results: { game, entities: entities.map((e) => e.name) }, ain_scores: { pvp: ain } });
+        addHistory({ tool: "zpl_pvp_balance", domain: "game", results: { game, entities: entities.map((e) => e.name), tokens_used: result.tokens_used }, ain_scores: { pvp: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -242,7 +242,7 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
         else text += `\n**Verdict:** Heavily predatory rates. Top-tier items are extremely rare. May face regulatory issues in EU/JP/CN.\n`;
 
         text += `**Tokens:** ${result.tokens_used}`;
-        addHistory({ tool: "zpl_gacha_audit", domain: "game", results: { tiers: tiers.map((t) => t.name), pity }, ain_scores: { gacha: ain } });
+        addHistory({ tool: "zpl_gacha_audit", domain: "game", results: { tiers: tiers.map((t) => t.name), pity, tokens_used: result.tokens_used }, ain_scores: { gacha: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -307,7 +307,7 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
         }
 
         text += `**Tokens:** ${result.tokens_used}\n\n${ZPL_DISCLAIMER}`;
-        addHistory({ tool: "zpl_rng_test", domain: "game", results: { possible_values, sample_size: outcomes.length, insufficientSamples }, ain_scores: { rng: ain } });
+        addHistory({ tool: "zpl_rng_test", domain: "game", results: { possible_values, sample_size: outcomes.length, insufficientSamples, tokens_used: result.tokens_used }, ain_scores: { rng: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };

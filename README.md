@@ -4,7 +4,36 @@ Model Context Protocol (MCP) server for the **Zero Point Logic Engine** — a po
 
 Connects any MCP-compatible AI client (Claude Desktop, Claude Code, Cursor, Windsurf, etc.) to the ZPL Engine API for real-time bias detection, stability scoring, and neutrality analysis across multiple domains.
 
-**67 tools** (63 unique + 4 backwards-compat aliases) across 11 categories: Core, Finance, Gaming, AI/ML, Security, Crypto, Certification, Advanced, Universal, Meta, and AI Eval.
+**68 tools** (64 unique + 4 backwards-compat aliases) across 11 categories: Core, Finance, Gaming, AI/ML, Security, Crypto, Certification, Advanced, Universal, Meta, and AI Eval.
+
+## What's new in v4.0.0 (MAJOR RELEASE)
+
+Two months of incremental work consolidated. **21 bugs fixed**, **146 tests** (98 unit + 48 live MCP integration), **Windows + Linux verified**. Backwards compatible — legacy `zpl_u_<48hex>` keys still work, all 68 tools keep the same input shape.
+
+### New commands
+- **`npx zpl-engine-mcp setup`** — now memory-aware. Detects existing config and offers keep / re-setup / patch-only instead of forcing a fresh login. `--force` bypasses.
+- **`npx zpl-engine-mcp whoami`** — shows which account this install is logged into.
+- **`npx zpl-engine-mcp repair`** — wipes local config + removes the entry from each MCP client config (Claude Desktop, Cursor, Windsurf). Preserves unrelated entries. `--yes` skips confirmation.
+- **`npx zpl-engine-mcp --help`** / `--version` — POSIX-standard usage and version flags.
+- **`zpl_diagnose` MCP tool** — full health report (config + key + engine + auth) for issue reports.
+
+### Critical fixes
+- **API key regex** now accepts wizard-issued keys with type prefixes (`zpl_u_mcp_`, `zpl_u_cli_`, `zpl_u_default_`). Pre-4.0 the wizard install always failed silently.
+- **Cloudflare HTML responses explained** — actionable error messages with cf-ray ID instead of generic 403.
+- **Smoke test at end of setup** — catches replication lag between wizard approval and engine acceptance.
+- **Secret sanitizer in history** — no longer leaks wizard-prefixed ZPL keys or full Anthropic `sk-ant-*` tokens (regex was truncating at first hyphen).
+- **Safety bounds on numeric env vars** — `ZPL_RATE_LIMIT` clamped to [1, 600], `ZPL_MAX_RETRIES` to [0, 5].
+
+### Tool fixes
+- `zpl_simulate` 0/0 result on positive inputs (switched to distributionBias + identical-input short-circuit).
+- `zpl_liquidity` table/verdict misalignment (verdict now cites per-pool counts).
+- `zpl_quota` plan auto-detection from config.toml (env > config > "free").
+- `zpl_quota` + `zpl_alert` token estimate accuracy — 22 tools now persist real `tokens_used` instead of hardcoded heuristic.
+- `zpl_teach` snippet referenced never-published `@zeropointlogic/engine-mcp` package name.
+- Duplicate Claude Desktop entries auto-deduplicated on `setup`.
+- `LANGUAGE` dead-code env var removed.
+
+See [CHANGELOG](./CHANGELOG.md) for the complete list with rationales.
 
 ## What's new in v3.7.0
 

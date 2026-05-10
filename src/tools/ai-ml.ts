@@ -50,7 +50,7 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
         if (threshold !== undefined) text += `**Threshold:** ${threshold}\n`;
         text += `**Tokens:** ${result.tokens_used}`;
 
-        addHistory({ tool: "zpl_model_bias", domain: "ai", results: { model_name, classes: predictions.map((p) => p.class_name) }, ain_scores: { [label]: ain } });
+        addHistory({ tool: "zpl_model_bias", domain: "ai", results: { model_name, classes: predictions.map((p) => p.class_name), tokens_used: result.tokens_used }, ain_scores: { [label]: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -96,7 +96,7 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
         else text += `**Verdict:** Severe imbalance. Model will be biased. Use SMOTE, class weights, or undersample majority.\n`;
 
         text += `**Tokens:** ${result.tokens_used}`;
-        addHistory({ tool: "zpl_dataset_audit", domain: "ai", results: { dataset_name, classes: classes.map((c) => c.name) }, ain_scores: { [label]: ain } });
+        addHistory({ tool: "zpl_dataset_audit", domain: "ai", results: { dataset_name, classes: classes.map((c) => c.name), tokens_used: result.tokens_used }, ain_scores: { [label]: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -138,7 +138,7 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
         else text += `\n**Verdict:** Strong bias. Model consistently favors one response. This prompt triggers biased behavior.\n`;
 
         text += `**Tokens:** ${result.tokens_used}`;
-        addHistory({ tool: "zpl_prompt_test", domain: "ai", results: { prompt_description, total_runs }, ain_scores: { prompt: ain } });
+        addHistory({ tool: "zpl_prompt_test", domain: "ai", results: { prompt_description, total_runs, tokens_used: result.tokens_used }, ain_scores: { prompt: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -185,7 +185,7 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
 
         const scores: Record<string, number> = {};
         for (const r of results) scores[r.name] = r.ain;
-        addHistory({ tool: "zpl_benchmark", domain: "ai", results: { models: models.map((m) => m.name), metrics }, ain_scores: scores });
+        addHistory({ tool: "zpl_benchmark", domain: "ai", results: { models: models.map((m) => m.name), metrics, tokens_used: results.reduce((s, r) => s + r.tokens, 0) }, ain_scores: scores });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };

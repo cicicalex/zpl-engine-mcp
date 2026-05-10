@@ -7,7 +7,7 @@ import { z } from "zod";
 import type { Server } from "./helpers.js";
 import { distributionBias, directionalBias, concentrationBias, clampD, ainSignal, ZPL_DISCLAIMER } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
-import { addHistory, getHistory } from "../store.js";
+import { addHistory, getHistory, estimateOpTokens } from "../store.js";
 
 // --- Shared schema + handler for zpl_versus / zpl_balance_compare ---
 
@@ -76,7 +76,7 @@ function makeVersusHandler(getClient: () => ZPLEngineClient) {
 
       const scores: Record<string, number> = {};
       for (const r of results) scores[r.name] = r.ain;
-      addHistory({ tool: "zpl_versus", results: { title, items: items.map((i) => i.name) }, ain_scores: scores });
+      addHistory({ tool: "zpl_versus", results: { title, items: items.map((i) => i.name), tokens_used: results.reduce((s, r) => s + r.tokens, 0) }, ain_scores: scores });
 
       return { content: [{ type: "text" as const, text }] };
     } catch (err) {
@@ -142,11 +142,31 @@ or any future event.`,
           return { content: [{ type: "text" as const, text: "Error: baseline and modified must have same length" }], isError: true };
         }
 
+        // v3.7.2: short-circuit identical inputs so we don't spend tokens
+        // computing twice for a guaranteed delta=0. Previously this returned
+        // "0/0" (AIN floored by extreme directional bias on identical input)
+        // which looked like a bug instead of "you sent the same data".
+        const identical = baseline.every((v, i) => v === modified[i]);
+        if (identical) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `## Simulation: ${scenario}\n\n**No change detected.** baseline and modified are identical — nothing to compare.\n\n_Tip: change at least one value in \`modified\` to see the AIN delta._`,
+            }],
+          };
+        }
+
         const client = getClient();
         const d = clampD(baseline.length);
 
-        const biasBase = directionalBias(baseline);
-        const biasMod = directionalBias(modified);
+        // v3.7.2: switched to distributionBias (uniformity) from directionalBias
+        // (positive/negative ratio). Most "what-if" scenarios are positive
+        // values (portfolio allocations, team compositions, game balance) where
+        // directionalBias collapsed to 1 and engine returned AIN ≈ 0 for both
+        // sides — visible as the "0/0" bug. distributionBias measures how far
+        // the values are from uniform, which is what users actually want here.
+        const biasBase = distributionBias(baseline);
+        const biasMod = distributionBias(modified);
 
         const [resultBase, resultMod] = await Promise.all([
           client.compute({ d, bias: biasBase, samples: 2000 }),
@@ -192,7 +212,12 @@ or any future event.`,
           `predictive decisions.\n\n`;
         text += ZPL_DISCLAIMER;
 
-        addHistory({ tool: "zpl_simulate", results: { scenario, delta }, ain_scores: { before: ainBase, after: ainMod } });
+        // v3.7.2: persist tokens_used so estimateOpTokens reflects reality.
+        addHistory({
+          tool: "zpl_simulate",
+          results: { scenario, delta, tokens_used: resultBase.tokens_used + resultMod.tokens_used },
+          ain_scores: { before: ainBase, after: ainMod },
+        });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -486,7 +511,7 @@ Add to your Claude Desktop config:
   "mcpServers": {
     "ZPL Engine MCP": {
       "command": "npx",
-      "args": ["-y", "@zeropointlogic/engine-mcp"],
+      "args": ["-y", "zpl-engine-mcp"],
       "env": { "ZPL_API_KEY": "zpl_u_YOUR_KEY" }
     }
   }
@@ -529,16 +554,13 @@ https://zeropointlogic.io`,
         const limit = Number((PLAN_INFO[plan] ?? PLAN_INFO.free).tokens.replace(/,/g, ""));
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        // Only a few tools save totalTokens explicitly (e.g. zpl_report). For everything else
-        // we use a best-effort per-op estimate so the alert isn't silently always "OK".
+        // Use shared shape-aware estimator (same as zpl_quota) so the two tools agree.
         let monthTokens = 0;
         let monthOps = 0;
         for (const h of history) {
           if (new Date(h.timestamp) < monthStart) continue;
           monthOps++;
-          const results = h.results as Record<string, unknown>;
-          if (typeof results.totalTokens === "number") monthTokens += results.totalTokens;
-          else monthTokens += 5; // matches the per-op estimate used by zpl_quota
+          monthTokens += estimateOpTokens(h);
         }
         const remaining = Math.max(0, limit - monthTokens);
         const threshold = target_tokens ?? 500;

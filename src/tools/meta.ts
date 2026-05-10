@@ -7,9 +7,10 @@ import type { Server } from "./helpers.js";
 import { clampD, ainSignal } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { resolveZplApiKey } from "../env-keys.js";
+import { loadPlan } from "../config.js";
 import { getValidatedEngineBaseUrl } from "../engine-url.js";
 import { getMcpPackageVersion } from "../package-meta.js";
-import { getHistory, addHistory } from "../store.js";
+import { getHistory, addHistory, estimateOpTokens } from "../store.js";
 
 /** Plan details — MUST match constants.ts on ZPL Main website */
 const PLAN_INFO: Record<string, { price: string; annualPrice: string; maxD: number; tokens: string; rate: string; keys: number }> = {
@@ -57,7 +58,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
         "**Use cases:** finance (portfolio bias), gaming (loot/RNG fairness), AI/ML (model bias),",
         "security (vulnerability balance), crypto (tokenomics, whale concentration).",
         "",
-        "**Total tools:** 63 unique (+ 4 backwards-compat aliases = 67 registered) across 11 categories.",
+        "**Total tools:** 64 unique (+ 4 backwards-compat aliases = 68 registered) across 11 categories.",
         "",
         "**Pricing:** Free plan = 5,000 tokens/month, no credit card. Paid plans from $10/mo.",
         "Sign up: https://zeropointlogic.io/auth/register",
@@ -85,11 +86,14 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
       if (!apiKey) {
         return { content: [{ type: "text" as const, text: "No API key set. Call `zpl_about` for setup instructions." }] };
       }
-      const plan = (process.env.ZPL_PLAN ?? "free").toLowerCase();
+      // v3.7.2: env > config.toml > "free". Engine /api/me endpoint pending.
+      const plan = await loadPlan();
       const info = PLAN_INFO[plan] ?? PLAN_INFO.free;
       const monthlyLimit = Number(info.tokens.replace(/,/g, ""));
 
-      // Sum history this month
+      // Sum history this month using shape-aware token estimator.
+      // Real numbers when tools save `tokens_used`; tool-shape heuristic otherwise.
+      // Authoritative quota lives on engine — this is a budgeting hint only.
       const history = getHistory(1000);
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -98,8 +102,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
       for (const h of history) {
         if (new Date(h.timestamp) < monthStart) continue;
         monthOps++;
-        // Estimate tokens by typical cost — this is local approximation
-        monthTokens += 5;
+        monthTokens += estimateOpTokens(h);
       }
       const remaining = Math.max(0, monthlyLimit - monthTokens);
       const pct = Math.round((monthTokens / monthlyLimit) * 100);
@@ -149,6 +152,115 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
           isError: true,
         };
       }
+    }
+  );
+
+  // --- zpl_diagnose: full diagnostic — config + key + engine reachability ---
+  // Added v3.7.2. Use this when a tool fails and you want to know whether the
+  // problem is your config, your key, the network, or the engine itself.
+  // (Distinct from `zpl_health` in index.ts which is a 1-line engine ping.)
+  server.tool(
+    "zpl_diagnose",
+    "Run a full ZPL MCP diagnostic: checks config file source, API key format, engine reachability, authenticated probe, and history sanity. Returns a markdown report. Use this first when troubleshooting — paste the report when filing an issue. Costs 1 token (a single d=3 compute).",
+    {},
+    async () => {
+      const lines: string[] = [];
+      lines.push(`# ZPL MCP Health Check`);
+      lines.push("");
+      lines.push(`**MCP version:** ${getMcpPackageVersion()}`);
+      lines.push("");
+
+      // 1. Config presence (env vs config.toml)
+      const apiKey = resolveZplApiKey();
+      let keySource: "env" | "config" | "none" = "none";
+      if (apiKey) keySource = "env";
+      try {
+        const { loadApiKey } = await import("../config.js");
+        const loaded = await loadApiKey();
+        if (loaded.source !== "none") keySource = loaded.source;
+      } catch { /* fine */ }
+      lines.push(`## 1. Config`);
+      lines.push(`- Key source: \`${keySource}\``);
+      if (keySource === "none") {
+        lines.push(`- ❌ No API key found. Run \`npx zpl-engine-mcp setup\` or set \`ZPL_API_KEY\`.`);
+      }
+
+      // 2. Key format (without leaking the key itself)
+      const { isValidApiKeyFormat, isServiceKey } = await import("../api-key-format.js");
+      const keyToCheck = apiKey || (keySource === "config" ? "from-config" : "");
+      lines.push("");
+      lines.push(`## 2. Key format`);
+      if (keySource === "none") {
+        lines.push(`- ⏭ Skipped (no key).`);
+      } else if (keyToCheck === "from-config") {
+        lines.push(`- ⏭ Validated by MCP at startup (config-loaded keys are checked then).`);
+      } else if (isServiceKey(keyToCheck)) {
+        lines.push(`- ❌ Service key (\`zpl_s_...\`) — MCP needs a USER key (\`zpl_u_...\`).`);
+      } else if (!isValidApiKeyFormat(keyToCheck)) {
+        lines.push(`- ❌ Invalid format. Run \`npx zpl-engine-mcp setup\` to regenerate.`);
+      } else {
+        lines.push(`- ✅ Format OK.`);
+      }
+
+      // 3. Engine URL + reachability
+      lines.push("");
+      lines.push(`## 3. Engine`);
+      let baseUrl = "(unset)";
+      try {
+        baseUrl = getValidatedEngineBaseUrl();
+        lines.push(`- URL: \`${baseUrl}\``);
+      } catch (err) {
+        lines.push(`- ❌ Bad ZPL_ENGINE_URL: ${(err as Error).message}`);
+      }
+
+      // 4. Live engine probe (no auth)
+      let healthOk = false;
+      let healthVersion = "?";
+      if (baseUrl !== "(unset)") {
+        try {
+          const probeClient = new ZPLEngineClient(apiKey || "missing", baseUrl);
+          const h = await probeClient.health();
+          healthOk = h.status === "ok";
+          healthVersion = h.version;
+          lines.push(`- /health: ✅ status=${h.status} version=${h.version}`);
+        } catch (err) {
+          lines.push(`- /health: ❌ ${(err as Error).message}`);
+        }
+      }
+
+      // 5. Authenticated probe (1 token cost)
+      lines.push("");
+      lines.push(`## 4. Auth probe (costs 1 token)`);
+      if (!apiKey || !healthOk) {
+        lines.push(`- ⏭ Skipped (no key or engine unreachable).`);
+      } else {
+        try {
+          const client = getClient();
+          const r = await client.compute({ d: 3, bias: 0.5, samples: 100 });
+          if (typeof r.ain === "number") {
+            lines.push(`- ✅ Compute OK. Engine accepted the key. (sample AIN ${Math.round(r.ain * 100)}/100, ${r.tokens_used} tokens)`);
+          } else {
+            lines.push(`- ⚠️ Compute returned malformed response.`);
+          }
+        } catch (err) {
+          lines.push(`- ❌ ${(err as Error).message}`);
+        }
+      }
+
+      // 6. Local history sanity
+      lines.push("");
+      lines.push(`## 5. Local history`);
+      try {
+        const h = getHistory(5);
+        lines.push(`- ${h.length} recent entries`);
+      } catch (err) {
+        lines.push(`- ⚠️ Could not read history: ${(err as Error).message}`);
+      }
+
+      lines.push("");
+      lines.push(`---`);
+      lines.push(`Tip: paste this report when filing an issue at https://github.com/cicicalex/zpl-engine-mcp/issues`);
+      return { content: [{ type: "text" as const, text: lines.join("\n") }] };
     }
   );
 
@@ -257,7 +369,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
         }
 
         text += `\n**Total tokens:** ${totalTokens}`;
-        addHistory({ tool: "zpl_batch", results: { job_count: jobs.length }, ain_scores: scores });
+        addHistory({ tool: "zpl_batch", results: { job_count: jobs.length, tokens_used: totalTokens }, ain_scores: scores });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };

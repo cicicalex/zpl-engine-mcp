@@ -101,7 +101,7 @@ export function registerCertificationTools(server: Server, getClient: () => ZPLE
           : `This debate is heavily one-sided. Major rebalancing needed.\n`;
         text += `\nTokens: ${result.tokens_used}`;
 
-        addHistory({ tool: "zpl_debate", results: { topic }, ain_scores: { debate: ain } });
+        addHistory({ tool: "zpl_debate", results: { topic, tokens_used: result.tokens_used }, ain_scores: { debate: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -147,7 +147,7 @@ export function registerCertificationTools(server: Server, getClient: () => ZPLE
           `An article can be linguistically balanced and factually wrong, or linguistically skewed and factually correct. ` +
           `Use this score to prioritize human review, not to certify content as "biased" or "neutral".\n`;
 
-        addHistory({ tool: "zpl_news_bias", results: { title, sentences: analysis.sentences }, ain_scores: { article: ain } });
+        addHistory({ tool: "zpl_news_bias", results: { title, sentences: analysis.sentences, tokens_used: result.tokens_used }, ain_scores: { article: ain } });
 
         const finalText = maybeRedactForPureMode({
           ain,
@@ -203,7 +203,7 @@ export function registerCertificationTools(server: Server, getClient: () => ZPLE
 
         output += `\nTokens: ${result.tokens_used}`;
 
-        addHistory({ tool: "zpl_review_bias", results: { product }, ain_scores: { review: ain } });
+        addHistory({ tool: "zpl_review_bias", results: { product, tokens_used: result.tokens_used }, ain_scores: { review: ain } });
 
         const finalText = maybeRedactForPureMode({
           ain,

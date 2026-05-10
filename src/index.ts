@@ -27,6 +27,10 @@ import { registerAllTools } from "./tools/index.js";
 import { loadApiKey } from "./config.js";
 import { getValidatedEngineBaseUrl } from "./engine-url.js";
 import { getMcpPackageVersion } from "./package-meta.js";
+// API key format validation extracted to api-key-format.ts for unit testing.
+// v3.7.2: Accepts wizard-issued keys with type prefixes (zpl_u_mcp_, zpl_u_cli_,
+// zpl_u_default_). See src/api-key-format.ts for full spec + regex rationale.
+import { isValidApiKeyFormat, isServiceKey } from "./api-key-format.js";
 
 // ---------------------------------------------------------------------------
 // Configuration from environment / config file
@@ -39,29 +43,14 @@ import { getMcpPackageVersion } from "./package-meta.js";
 // is wired up.
 let API_KEY = "";
 
-// Defence-in-depth: validate API key format client-side before hitting the engine.
-// Engine still does the authoritative check; this just fails fast on obvious garbage
-// and prevents accidentally leaking unrelated secrets (e.g. Stripe keys) in the
-// Authorization header.
-//
-// v3.5.0: Only `zpl_u_...` (user keys) are accepted. Service keys (`zpl_s_...`)
-// are server-side only and must be IP-restricted on the engine (see M2.1).
-// MCP clients must authenticate with user keys so plan limits apply per account.
-// Format: zpl_u_ + 48 hex chars = 54 chars total.
-const API_KEY_FORMAT = /^zpl_u_[a-f0-9]{48}$/;
-function isValidApiKeyFormat(key: string): boolean {
-  return API_KEY_FORMAT.test(key);
-}
-function isServiceKey(key: string): boolean {
-  return /^zpl_s_[a-f0-9]{48}$/.test(key);
-}
-
 // API key check moved to main() — allows Smithery sandbox scanning without key
 // ZPL_ENGINE_URL validated in getValidatedEngineBaseUrl() (host allowlist, no creds in URL).
 const DEFAULT_D = Math.max(3, Math.min(100, Number(process.env.ZPL_DEFAULT_D) || 9));
 const DEFAULT_SAMPLES = Math.max(100, Math.min(50000, Number(process.env.ZPL_DEFAULT_SAMPLES) || 1000));
 const OUTPUT_STYLE = (process.env.ZPL_OUTPUT ?? "detailed") as "detailed" | "compact";
-const LANGUAGE = process.env.ZPL_LANGUAGE ?? "en";
+// ZPL_LANGUAGE removed in v3.7.2 — was dead code (never consumed). i18n
+// not yet wired through tool descriptions / ainSignal bands. When implemented,
+// reintroduce as `LANG` and pipe through helpers.ts so all tools share it.
 const BUDGET_WARN = Number(process.env.ZPL_BUDGET_WARN) || 500;
 const SAVE_HISTORY = process.env.ZPL_SAVE_HISTORY !== "false";
 
@@ -124,7 +113,7 @@ function getClient(): ZPLEngineClient {
 const server = new McpServer({
   name: "ZPL Engine MCP",
   version: getMcpPackageVersion(),
-  description: "Mathematical stability engine. 67 tools (63 unique + 4 backwards-compat aliases). AIN is a STABILITY measurement only — never prediction or advice. v3.3 adds clearer balance-prefixed names, v3.4 adds 8 AI Eval tools for model consistency testing. Created by Ciciu Alexandru-Costinel.",
+  description: "Mathematical stability engine. 68 tools (64 unique + 4 backwards-compat aliases). AIN is a STABILITY measurement only — never prediction or advice. v4.0 ships 21 bug fixes, memory-aware setup, repair/whoami/diagnose commands, and a much friendlier error UX (Cloudflare detection, smoke-test on first install). Created by Ciciu Alexandru-Costinel.",
 });
 
 // Register all domain-specific tools (31 tools across 7 categories)
@@ -695,9 +684,52 @@ async function main() {
   // Must be the very first thing main() does — before the version check so users
   // with an outdated install can still *run* setup to get a fresh key flow
   // (setup itself doesn't call the engine, only zeropointlogic.io).
-  if (process.argv[2] === "setup") {
+  // v3.7.2: subcommands dispatch table.
+  //   --help / -h  — print usage and exit 0 (POSIX UX expectation).
+  //   --version / -v — print package version and exit 0.
+  //   setup   — interactive device-flow auth (now memory-aware: detects existing
+  //             config and asks before re-logging in. `--force` bypasses).
+  //   repair  — wipe local config + remove zpl-engine-mcp entries from clients.
+  //             `--yes` skips confirmation. Use when install is in confused state.
+  //   whoami  — print which account this install is logged into. No-op safe.
+  const cmd = process.argv[2];
+  if (cmd === "--help" || cmd === "-h" || cmd === "help") {
+    process.stdout.write(
+      `zpl-engine-mcp v${getMcpPackageVersion()} — ZPL Engine Model Context Protocol server\n` +
+      `\n` +
+      `Usage:\n` +
+      `  npx zpl-engine-mcp                      Start the MCP server (called automatically by Claude Desktop / Cursor / Windsurf via MCP config)\n` +
+      `  npx zpl-engine-mcp setup [--force]      Interactive device-flow login. --force re-logs even if a config exists\n` +
+      `  npx zpl-engine-mcp whoami               Show which account this install is logged into\n` +
+      `  npx zpl-engine-mcp repair [--yes|-y]    Wipe local config + remove entries from MCP client configs (Claude / Cursor / Windsurf)\n` +
+      `  npx zpl-engine-mcp --version            Print version\n` +
+      `  npx zpl-engine-mcp --help               This screen\n` +
+      `\n` +
+      `Docs:    https://github.com/cicicalex/zpl-engine-mcp\n` +
+      `Issues:  https://github.com/cicicalex/zpl-engine-mcp/issues\n` +
+      `Account: https://zeropointlogic.io/dashboard/api-keys\n`,
+    );
+    process.exit(0);
+  }
+  if (cmd === "--version" || cmd === "-v" || cmd === "version") {
+    process.stdout.write(`${getMcpPackageVersion()}\n`);
+    process.exit(0);
+  }
+  if (cmd === "setup") {
     const { runSetup } = await import("./setup.js");
-    await runSetup();
+    const force = process.argv.includes("--force");
+    await runSetup({ force });
+    process.exit(0);
+  }
+  if (cmd === "repair") {
+    const { runRepair } = await import("./setup.js");
+    const yes = process.argv.includes("--yes") || process.argv.includes("-y");
+    await runRepair({ yes });
+    process.exit(0);
+  }
+  if (cmd === "whoami") {
+    const { runWhoami } = await import("./setup.js");
+    await runWhoami();
     process.exit(0);
   }
 
@@ -781,7 +813,7 @@ async function main() {
 //   - stdin is piped (MCP client connected over stdio), OR
 //   - the user invoked `zpl-engine-mcp setup` explicitly from a TTY.
 // Skip otherwise (Smithery scan, module import for testing, etc.)
-if (!process.stdin.isTTY || process.argv[2] === "setup") {
+if (!process.stdin.isTTY || ["setup", "repair", "whoami"].includes(process.argv[2])) {
   main().catch((err) => {
     console.error("Fatal:", err);
     process.exit(1);

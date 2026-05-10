@@ -45,17 +45,44 @@ export function getConfigPath(): string {
  * Returns undefined on any parse failure — caller decides what to do.
  */
 export function parseApiKeyFromToml(raw: string): string | undefined {
+  return parseTomlString(raw, "api_key");
+}
+
+/** Read a single named string field from our minimal config.toml. */
+export function parseTomlString(raw: string, field: string): string | undefined {
+  // Field names are caller-provided constants; escape just in case.
+  const fieldEsc = field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`^${fieldEsc}\\s*=\\s*(?:"([^"]*)"|'([^']*)')\\s*(?:#.*)?$`);
   for (const rawLine of raw.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) continue;
-    // Match: api_key = "value"  or  api_key='value'
-    const m = /^api_key\s*=\s*(?:"([^"]*)"|'([^']*)')\s*(?:#.*)?$/.exec(line);
+    const m = re.exec(line);
     if (m) {
       const val = (m[1] ?? m[2] ?? "").trim();
       if (val) return val;
     }
   }
   return undefined;
+}
+
+/**
+ * Best-effort plan lookup from local config.
+ *
+ * Engine doesn't expose a /api/me endpoint yet (TODO M3.x), so we can't
+ * auto-detect plan from the server. v3.7.2 adds `plan` to config.toml so
+ * users can set it once after setup and zpl_quota / zpl_alert estimates
+ * stay accurate. Precedence: env var > config.toml > "free".
+ */
+export async function loadPlan(): Promise<string> {
+  const envPlan = process.env.ZPL_PLAN?.toLowerCase();
+  if (envPlan) return envPlan;
+  try {
+    const { readFile } = await import("node:fs/promises");
+    const raw = await readFile(getConfigPath(), "utf-8");
+    const plan = parseTomlString(raw, "plan");
+    if (plan) return plan.toLowerCase();
+  } catch { /* config missing — fine */ }
+  return "free";
 }
 
 /**

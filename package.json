@@ -1,8 +1,8 @@
 {
   "name": "zpl-engine-mcp",
-  "version": "3.7.1",
+  "version": "4.0.0",
   "mcpName": "io.github.cicicalex/engine",
-  "description": "v3.7.1: First-run error messages now spell out the 'create free account' step explicitly and lead with `npx zpl-engine-mcp setup` as the recommended path. Same funnel fix surfaces in the startup banner when no key is configured. v3.7.0 auto-configures Claude Desktop, Cursor, and Windsurf in one pass. Free plan: 5,000 tokens/month. User-key only (ZPL_SERVICE_KEY removed). 67 tools (63 unique + 4 aliases) across 11 categories. 8 AI Eval tools for model behavioral consistency (sycophancy, refusal balance, language equity, persona drift, safety boundary, hallucination, emotional stability). Mathematical stability engine for measuring balance and bias in finance, gaming, AI/ML, security, and crypto data. AIN is a STABILITY measurement only — never prediction or advice.",
+  "description": "v4.0.0 MAJOR RELEASE: 21 bugs fixed including the critical wizard-key regex that left 0% of new installs functional. New: memory-aware setup (no forced re-login), `whoami` / `repair` / `diagnose` commands, `--force` / `--help` / `--version` flags, smoke test at setup completion, Cloudflare HTML detection, deduplication of legacy Claude Desktop entries, secret sanitizer fix (was leaking wizard prefixes + Anthropic keys), safety bounds on numeric env vars, token-cost tracking in 22 tools. 68 tools (64 unique + 4 aliases) across 11 categories. 146 tests (98 unit + 48 integration). Cross-OS verified Windows + Linux Alpine. Free plan: 5,000 tokens/month. User-key only. Mathematical stability engine for measuring balance and bias in finance, gaming, AI/ML, security, and crypto data. AIN is a STABILITY measurement only — never prediction or advice.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -13,7 +13,9 @@
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "inspect": "npx @modelcontextprotocol/inspector node dist/index.js",
-    "test": "npm run build && node --test test/engine-url.test.mjs test/patch-config.test.mjs"
+    "test": "npm run build && node --test test/engine-url.test.mjs test/patch-config.test.mjs test/api-key-format.test.mjs test/config-toml.test.mjs test/estimate-tokens.test.mjs test/dedupe-mcp-entries.test.mjs test/cloudflare-error.test.mjs test/setup-memory.test.mjs test/source-regressions.test.mjs test/edge-cases.test.mjs test/sanitize-secrets.test.mjs",
+    "test:integration": "npm run build && node --test test/integration-smoke.test.mjs",
+    "test:all": "npm test && npm run test:integration"
   },
   "keywords": [
     "mcp",

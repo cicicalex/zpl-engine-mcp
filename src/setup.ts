@@ -30,11 +30,13 @@
  *     backend so a misbehaving server can't DoS itself.
  */
 
-import { mkdir, writeFile, readFile, chmod, stat } from "node:fs/promises";
+import { mkdir, writeFile, readFile, chmod, stat, rm, unlink } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
 import { getMcpPackageVersion } from "./package-meta.js";
+import { getConfigPath, parseApiKeyFromToml } from "./config.js";
 
 const BACKEND_BASE = process.env.ZPL_BACKEND_URL ?? "https://zeropointlogic.io";
 const POLL_TIMEOUT_MS = 10 * 60 * 1000; // 10 min hard cap — matches device_code expiry
@@ -94,6 +96,48 @@ function log(msg: string): void {
 
 function logErr(msg: string): void {
   process.stderr.write(msg + "\n");
+}
+
+/**
+ * Read one line from stdin. Returns empty string when stdin is not a TTY
+ * (CI, piped input, MCP stdio context) so non-interactive callers fall
+ * through to safe defaults instead of hanging on a prompt that nobody
+ * will ever answer.
+ */
+async function prompt(question: string): Promise<string> {
+  if (!process.stdin.isTTY) return "";
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise<string>((resolve) => {
+    rl.question(question, (ans) => {
+      rl.close();
+      resolve(ans.trim());
+    });
+  });
+}
+
+/**
+ * Read existing ~/.zpl/config.toml and return key + email.
+ * Returns null if file missing, unreadable, or no api_key inside.
+ * Exported for unit tests (so we can verify behaviour against fixture configs).
+ */
+export async function readExistingConfig(): Promise<{ apiKey: string; userEmail: string; path: string } | null> {
+  const path = getConfigPath();
+  try {
+    const raw = await readFile(path, "utf-8");
+    const apiKey = parseApiKeyFromToml(raw);
+    if (!apiKey) return null;
+    // user_email is the only other thing we ever write — same parser shape.
+    let userEmail = "";
+    for (const rawLine of raw.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#")) continue;
+      const m = /^user_email\s*=\s*(?:"([^"]*)"|'([^']*)')\s*(?:#.*)?$/.exec(line);
+      if (m) { userEmail = (m[1] ?? m[2] ?? "").trim(); break; }
+    }
+    return { apiKey, userEmail: userEmail || "(unknown)", path };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -317,6 +361,26 @@ export async function patchMcpConfigFile(
       return { result: "malformed", path };
     }
     parsed.mcpServers = parsed.mcpServers ?? {};
+    // v3.7.2: dedupe legacy/variant keys so we end up with EXACTLY ONE
+    // ZPL entry. Earlier versions of this wizard (and copy-pasted snippets
+    // from old docs) created keys like "ZPL Engine MCP", "zpl-engine",
+    // "@zeropointlogic/engine-mcp" which Claude Desktop happily loaded all
+    // at once → duplicate tools / quota counted twice / confusion. We drop
+    // any siblings whose command/args clearly point at this package, then
+    // (re)write the canonical "zpl-engine-mcp" entry.
+    const ZPL_PKG_PATTERNS = [/zpl-engine-mcp/i, /@zeropointlogic\/engine-mcp/i];
+    for (const key of Object.keys(parsed.mcpServers)) {
+      if (key === "zpl-engine-mcp") continue; // canonical entry — keep, will overwrite below
+      const v = parsed.mcpServers[key] as { command?: string; args?: string[] } | undefined;
+      const cmd = v?.command ?? "";
+      const args = (v?.args ?? []).join(" ");
+      const looksLikeZpl =
+        ZPL_PKG_PATTERNS.some((p) => p.test(cmd) || p.test(args)) ||
+        ZPL_PKG_PATTERNS.some((p) => p.test(key));
+      if (looksLikeZpl) {
+        delete parsed.mcpServers[key];
+      }
+    }
     parsed.mcpServers["zpl-engine-mcp"] = entry;
     await writeFile(path, JSON.stringify(parsed, null, 2), "utf-8");
     return { result: "updated", path };
@@ -338,64 +402,30 @@ export async function patchMcpConfigFile(
 }
 
 // ---------------------------------------------------------------------------
-// Public entry
+// Client patching (extracted so re-setup, --force, and patch-only all share it)
 // ---------------------------------------------------------------------------
 
-export async function runSetup(): Promise<void> {
-  log("");
-  log("Welcome to ZPL MCP setup.");
-  log("");
+const CLIENTS: Array<{ name: string; path: string; restartHint: string }> = [
+  { name: "Claude Desktop", path: claudeDesktopConfigPath(), restartHint: "Restart Claude Desktop" },
+  { name: "Cursor",         path: cursorConfigPath(),         restartHint: "Restart Cursor" },
+  { name: "Windsurf",       path: windsurfConfigPath(),       restartHint: "Restart Windsurf" },
+];
 
-  let start: StartResponse;
-  try {
-    start = await startDeviceFlow();
-  } catch (err) {
-    logErr(`Could not contact ${BACKEND_BASE}: ${(err as Error).message}`);
-    logErr("Check your internet connection and try again.");
-    process.exit(1);
-  }
-
-  // Build the full URL with the code pre-filled so the user only has to click "Approve".
-  const sep = start.verification_uri.includes("?") ? "&" : "?";
-  const approveUrl = `${start.verification_uri}${sep}code=${encodeURIComponent(start.user_code)}`;
-
-  log(`Opening ${approveUrl} in your browser...`);
-  log(`(If it doesn't open, paste that URL manually.)`);
-  log("");
-  openInBrowser(approveUrl);
-
-  let approved: StatusApproved;
-  try {
-    approved = await waitForApproval(start);
-  } catch (err) {
-    logErr(`Setup failed: ${(err as Error).message}`);
-    process.exit(1);
-  }
-
-  // Save config.toml
-  let configPath: string;
-  try {
-    configPath = await writeConfigToml(approved.api_key, approved.user_email);
-  } catch (err) {
-    logErr(`Could not write config file: ${(err as Error).message}`);
-    logErr("Your API key was approved, but we couldn't save it locally.");
-    logErr(`Set this env var in your MCP config instead:  ZPL_API_KEY=${approved.api_key}`);
-    process.exit(1);
-  }
-
-  // Patch all three supported clients in parallel. Each client failing (or
-  // simply not being installed) should never block the others — so every
-  // patch is wrapped in its own catch-to-manual.
-  const CLIENTS: Array<{ name: string; path: string; restartHint: string }> = [
-    { name: "Claude Desktop", path: claudeDesktopConfigPath(), restartHint: "Restart Claude Desktop" },
-    { name: "Cursor",         path: cursorConfigPath(),         restartHint: "Restart Cursor" },
-    { name: "Windsurf",       path: windsurfConfigPath(),       restartHint: "Restart Windsurf" },
-  ];
-
+/**
+ * Patch all three MCP-compatible clients with the given API key.
+ * Each patch is isolated — one client failing (or not being installed) never
+ * blocks the others. Logs status to stdout. Returns aggregate counts so the
+ * caller can decide whether to print the manual fallback snippet.
+ */
+async function patchAllClients(apiKey: string): Promise<{
+  configured: number;
+  malformed: number;
+  manual: number;
+}> {
   const patches = await Promise.all(
     CLIENTS.map(async (c) => {
       try {
-        const r = await patchMcpConfigFile(c.path, approved.api_key);
+        const r = await patchMcpConfigFile(c.path, apiKey);
         return { client: c, ...r };
       } catch (err) {
         logErr(`(${c.name} config patch failed: ${(err as Error).message})`);
@@ -403,11 +433,6 @@ export async function runSetup(): Promise<void> {
       }
     }),
   );
-
-  log("");
-  log(`Connected as ${approved.user_email}`);
-  log(`Key saved to ${configPath}`);
-  log("");
 
   const configured = patches.filter((p) => p.result === "updated" || p.result === "created");
   const malformed  = patches.filter((p) => p.result === "malformed");
@@ -434,16 +459,284 @@ export async function runSetup(): Promise<void> {
     log("Open each file manually and paste the snippet below under mcpServers.");
   }
 
-  // If at least one client is unresolved (not installed, or malformed),
-  // print the snippet once so the user has a paste-ready fallback.
   if (malformed.length > 0 || (configured.length === 0 && manual.length > 0)) {
     if (manual.length > 0 && configured.length === 0) {
       log("");
       log("If you're using a client we don't auto-detect (Claude Code, VS Code, Zed, ...), add this to its MCP config:");
     }
-    printSnippet(approved.api_key);
+    printSnippet(apiKey);
   }
 
+  return { configured: configured.length, malformed: malformed.length, manual: manual.length };
+}
+
+// ---------------------------------------------------------------------------
+// Public entries: setup / repair / whoami
+// ---------------------------------------------------------------------------
+
+export interface SetupOptions {
+  /** Skip the "already logged in" prompt and force a fresh device-flow login. */
+  force?: boolean;
+}
+
+/**
+ * `npx zpl-engine-mcp setup` — interactive device-flow auth.
+ *
+ * v3.7.2: detects existing config and offers three choices instead of
+ * silently re-authenticating. Stops the "every run forces a new browser
+ * login" UX papercut. `--force` skips the prompt for power users who
+ * want to rotate keys.
+ */
+export async function runSetup(opts: SetupOptions = {}): Promise<void> {
+  log("");
+  log(`Welcome to ZPL MCP setup. (v${getMcpPackageVersion()})`);
+  log("");
+
+  // v3.7.2: respect existing login. Saves a browser round-trip every time.
+  if (!opts.force) {
+    const existing = await readExistingConfig();
+    if (existing) {
+      log(`✅ Already logged in as ${existing.userEmail}`);
+      log(`   Config: ${existing.path}`);
+      log("");
+      log("What would you like to do?");
+      log("  [1] Keep existing config (default)");
+      log("  [2] Re-setup — login again with a different account / new key");
+      log("  [3] Patch only — keep this key, just (re-)install Claude/Cursor/Windsurf entries");
+      log("");
+      const choice = await prompt("Choose [1/2/3] (or press Enter for 1): ");
+
+      if (choice === "" || choice === "1") {
+        log("");
+        log("Keeping existing config. Nothing to do.");
+        log("Tip: run `npx zpl-engine-mcp setup --force` if you want to re-login anyway.");
+        log("");
+        return;
+      }
+
+      if (choice === "3") {
+        log("");
+        log("Patching MCP client configs with existing key (no re-login needed)...");
+        log("");
+        await patchAllClients(existing.apiKey);
+        log("");
+        return;
+      }
+
+      // choice === "2" → fall through to full device flow.
+      log("");
+      log("Re-setup requested. Starting fresh device-flow login...");
+      log("");
+    }
+  } else {
+    log("--force passed — skipping existing-config check, going straight to device-flow login.");
+    log("");
+  }
+
+  // ---- Full device flow (first-time install OR explicit re-setup) ----
+
+  let start: StartResponse;
+  try {
+    start = await startDeviceFlow();
+  } catch (err) {
+    logErr(`Could not contact ${BACKEND_BASE}: ${(err as Error).message}`);
+    logErr("Check your internet connection and try again.");
+    process.exit(1);
+  }
+
+  const sep = start.verification_uri.includes("?") ? "&" : "?";
+  const approveUrl = `${start.verification_uri}${sep}code=${encodeURIComponent(start.user_code)}`;
+
+  log(`Opening ${approveUrl} in your browser...`);
+  log(`(If it doesn't open, paste that URL manually.)`);
+  log("");
+  openInBrowser(approveUrl);
+
+  let approved: StatusApproved;
+  try {
+    approved = await waitForApproval(start);
+  } catch (err) {
+    logErr(`Setup failed: ${(err as Error).message}`);
+    process.exit(1);
+  }
+
+  let configPath: string;
+  try {
+    configPath = await writeConfigToml(approved.api_key, approved.user_email);
+  } catch (err) {
+    logErr(`Could not write config file: ${(err as Error).message}`);
+    logErr("Your API key was approved, but we couldn't save it locally.");
+    logErr(`Set this env var in your MCP config instead:  ZPL_API_KEY=${approved.api_key}`);
+    process.exit(1);
+  }
+
+  log("");
+  log(`Connected as ${approved.user_email}`);
+  log(`Key saved to ${configPath}`);
+  log("");
+
+  await patchAllClients(approved.api_key);
+
+  // v3.7.2: smoke-test the freshly-issued key against the engine. Catches
+  // the (rare but devastating) case where the wizard succeeds on the
+  // website side but the engine doesn't recognise the key yet (replication
+  // lag, Cloudflare cache, network split). Failing here gives an actionable
+  // error before the user opens Claude Desktop and sees a generic "tool
+  // failed" with no clue.
+  log("");
+  log("Smoke test: contacting engine with the new key...");
+  try {
+    await runSmokeTest(approved.api_key);
+    log("✅ Engine OK — your install is ready. Restart your MCP client to use it.");
+  } catch (err) {
+    logErr(`⚠️  Smoke test failed: ${(err as Error).message}`);
+    logErr("The key was saved, but the engine didn't accept it on first try.");
+    logErr("This is usually transient — wait 30s and restart your MCP client.");
+    logErr("If it persists, run `npx zpl-engine-mcp repair` and try again.");
+  }
+  log("");
+}
+
+/**
+ * Verify the freshly-issued key works end-to-end:
+ *   1. /health responds (engine reachable, not behind broken Cloudflare)
+ *   2. /compute with the smallest possible call accepts our key (auth OK)
+ *
+ * Imports the engine client lazily so non-setup paths don't pay the cost.
+ */
+async function runSmokeTest(apiKey: string): Promise<void> {
+  const { ZPLEngineClient } = await import("./engine-client.js");
+  const { getValidatedEngineBaseUrl } = await import("./engine-url.js");
+  const baseUrl = getValidatedEngineBaseUrl();
+  const client = new ZPLEngineClient(apiKey, baseUrl);
+
+  // Step 1: health (no auth required — catches Cloudflare / DNS / outage).
+  const health = await client.health();
+  if (health.status !== "ok") {
+    throw new Error(`Engine /health returned status="${health.status}"`);
+  }
+
+  // Step 2: minimum-cost authenticated compute (catches auth & key issues).
+  const result = await client.compute({ d: 3, bias: 0.5, samples: 100 });
+  if (typeof result.ain !== "number") {
+    throw new Error(`Engine /compute returned malformed response (no ain field)`);
+  }
+}
+
+/**
+ * `npx zpl-engine-mcp repair` — wipe local config + remove MCP entries
+ * from Claude Desktop / Cursor / Windsurf configs.
+ *
+ * Use when:
+ *   - Setup left the install in a confused state (duplicate entries, stale key)
+ *   - User wants a clean uninstall before reinstalling
+ *   - Switching to a different account and `--force` re-setup isn't enough
+ *
+ * Always asks for confirmation in interactive mode. Pass `--yes` to skip
+ * (useful for automation / one-line bash docs).
+ */
+export interface RepairOptions {
+  /** Skip the confirmation prompt. */
+  yes?: boolean;
+}
+
+export async function runRepair(opts: RepairOptions = {}): Promise<void> {
+  log("");
+  log(`ZPL MCP repair. (v${getMcpPackageVersion()})`);
+  log("");
+  log("This will:");
+  log(`  1. Delete ${getConfigPath()}`);
+  log(`  2. Remove the "zpl-engine-mcp" entry from each MCP client config:`);
+  for (const c of CLIENTS) log(`      - ${c.name}: ${c.path}`);
+  log("");
+  log("Other MCP servers in those configs are left untouched.");
+  log("");
+
+  if (!opts.yes) {
+    const ok = await prompt("Continue? [y/N]: ");
+    if (ok.toLowerCase() !== "y" && ok.toLowerCase() !== "yes") {
+      log("Cancelled. Nothing was changed.");
+      return;
+    }
+  }
+
+  // 1. Wipe local config.
+  let configRemoved = false;
+  try {
+    await unlink(getConfigPath());
+    configRemoved = true;
+    log(`Deleted ${getConfigPath()}`);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code === "ENOENT") {
+      log(`(${getConfigPath()} did not exist — skipping.)`);
+    } else {
+      logErr(`Could not delete config: ${(err as Error).message}`);
+    }
+  }
+
+  // Best-effort wipe of ~/.zpl directory if empty.
+  if (configRemoved) {
+    try {
+      await rm(join(homedir(), ".zpl"), { recursive: false }); // only if empty
+    } catch { /* dir not empty or doesn't exist — fine */ }
+  }
+
+  // 2. Remove zpl-engine-mcp entry from each client.
+  for (const c of CLIENTS) {
+    try {
+      const raw = await readFile(c.path, "utf-8");
+      let parsed: ClaudeDesktopConfig;
+      try {
+        parsed = JSON.parse(raw) as ClaudeDesktopConfig;
+      } catch {
+        log(`(${c.name}: malformed JSON — skipped, please clean up manually at ${c.path})`);
+        continue;
+      }
+      if (!parsed.mcpServers || typeof parsed.mcpServers !== "object") {
+        log(`(${c.name}: no mcpServers section — nothing to remove)`);
+        continue;
+      }
+      if (!("zpl-engine-mcp" in parsed.mcpServers)) {
+        log(`(${c.name}: no zpl-engine-mcp entry — already clean)`);
+        continue;
+      }
+      delete parsed.mcpServers["zpl-engine-mcp"];
+      await writeFile(c.path, JSON.stringify(parsed, null, 2), "utf-8");
+      log(`Removed zpl-engine-mcp entry from ${c.name} (${c.path})`);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      if (code === "ENOENT") {
+        log(`(${c.name}: config file does not exist — nothing to remove)`);
+      } else {
+        logErr(`(${c.name}: could not patch — ${(err as Error).message})`);
+      }
+    }
+  }
+
+  log("");
+  log("Repair complete.");
+  log("To reinstall: `npx zpl-engine-mcp setup`");
+  log("");
+}
+
+/**
+ * `npx zpl-engine-mcp whoami` — print which account this install is logged
+ * into, without re-running the full setup. Useful for sanity-checking
+ * after an update or when troubleshooting.
+ */
+export async function runWhoami(): Promise<void> {
+  const existing = await readExistingConfig();
+  if (!existing) {
+    log("");
+    log("Not logged in. Run `npx zpl-engine-mcp setup` to get started.");
+    log("");
+    return;
+  }
+  log("");
+  log(`Logged in as: ${existing.userEmail}`);
+  log(`Config:       ${existing.path}`);
+  log(`MCP version:  ${getMcpPackageVersion()}`);
   log("");
 }
 

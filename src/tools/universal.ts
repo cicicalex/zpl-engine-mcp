@@ -83,7 +83,8 @@ function makeDecideHandler(getClient: () => ZPLEngineClient) {
 
       text += `**Tokens:** ${resultA.tokens_used + resultB.tokens_used}`;
 
-      addHistory({ tool: "zpl_decide", results: { question }, ain_scores: { [option_a]: ainA, [option_b]: ainB } });
+      // v3.7.2: persist tokens_used so estimateOpTokens reflects reality.
+      addHistory({ tool: "zpl_decide", results: { question, tokens_used: resultA.tokens_used + resultB.tokens_used }, ain_scores: { [option_a]: ainA, [option_b]: ainB } });
       return { content: [{ type: "text" as const, text }] };
     } catch (err) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -126,7 +127,7 @@ function makeCompareHandler(getClient: () => ZPLEngineClient) {
       text += `\n**More balanced:** ${winner}\n`;
       text += `**Tokens:** ${resultA.tokens_used + resultB.tokens_used}`;
 
-      addHistory({ tool: "zpl_compare", results: { item_a, item_b }, ain_scores: { [item_a]: ainA, [item_b]: ainB } });
+      addHistory({ tool: "zpl_compare", results: { item_a, item_b, tokens_used: resultA.tokens_used + resultB.tokens_used }, ain_scores: { [item_a]: ainA, [item_b]: ainB } });
       return { content: [{ type: "text" as const, text }] };
     } catch (err) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -164,7 +165,7 @@ function makeRankHandler(getClient: () => ZPLEngineClient) {
 
       const scores: Record<string, number> = {};
       for (const r of results) scores[r.name] = r.ain;
-      addHistory({ tool: "zpl_rank", results: { options: options.map((o) => o.name) }, ain_scores: scores });
+      addHistory({ tool: "zpl_rank", results: { options: options.map((o) => o.name), tokens_used: results.reduce((s, r) => s + r.tokens, 0) }, ain_scores: scores });
       return { content: [{ type: "text" as const, text }] };
     } catch (err) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -286,7 +287,7 @@ export function registerUniversalTools(server: Server, getClient: () => ZPLEngin
 
         output += `\n*Analyzed by ZPL Engine*`;
 
-        addHistory({ tool: "zpl_check_response", results: { context: context ?? "text analysis", sentences: sentences.length }, ain_scores: { response: ain } });
+        addHistory({ tool: "zpl_check_response", results: { context: context ?? "text analysis", sentences: sentences.length, tokens_used: result.tokens_used }, ain_scores: { response: ain } });
 
         // Pure mode hides the score from the AI to prevent reactivity bias.
         // Coach mode returns the full output so the AI can self-correct.

@@ -46,7 +46,7 @@ export function registerCryptoTools(server: Server, getClient: () => ZPLEngineCl
         else text += `\n**Verdict:** High whale risk! Top holders can crash the price. Rug pull risk elevated.\n`;
 
         text += `**Tokens:** ${result.tokens_used}`;
-        addHistory({ tool: "zpl_whale_check", domain: "crypto", results: { token, topTotal }, ain_scores: { [label]: ain } });
+        addHistory({ tool: "zpl_whale_check", domain: "crypto", results: { token, topTotal, tokens_used: result.tokens_used }, ain_scores: { [label]: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -88,7 +88,7 @@ export function registerCryptoTools(server: Server, getClient: () => ZPLEngineCl
         text += `\n**Avg risk:** ${avgRisk.toFixed(1)}/10 | **Biggest risk:** ${sorted[0].name} (${sorted[0].score}/10)\n`;
         text += `**Tokens:** ${result.tokens_used}`;
 
-        addHistory({ tool: "zpl_defi_risk", domain: "crypto", results: { protocol, avgRisk }, ain_scores: { [protocol]: ain } });
+        addHistory({ tool: "zpl_defi_risk", domain: "crypto", results: { protocol, avgRisk, tokens_used: result.tokens_used }, ain_scores: { [protocol]: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -122,23 +122,47 @@ export function registerCryptoTools(server: Server, getClient: () => ZPLEngineCl
         const result = await client.compute({ d, bias, samples: 2000 });
         const ain = Math.round(result.ain * 100);
 
+        // v3.7.2: align table & verdict — categorize pools first so the verdict
+        // can cite the actual table contents (e.g. "2 of 5 IMBALANCED") instead
+        // of just paraphrasing the aggregate AIN.
+        const rows = pools.map((p, i) => {
+          const total = p.token_a_value + p.token_b_value;
+          const pctA = total > 0 ? Math.round((p.token_a_value / total) * 100) : 50;
+          const dev = deviations[i];
+          const balance = dev < 0.1 ? "BALANCED" : dev < 0.3 ? "SLIGHT" : "IMBALANCED";
+          return { name: p.name, a: p.token_a_value, b: p.token_b_value, pctA, balance };
+        });
+        const counts = {
+          balanced:   rows.filter((r) => r.balance === "BALANCED").length,
+          slight:     rows.filter((r) => r.balance === "SLIGHT").length,
+          imbalanced: rows.filter((r) => r.balance === "IMBALANCED").length,
+        };
+
         let text = `## Liquidity Analysis — AIN ${ain}/100\n\n`;
         text += `| Pool | Token A | Token B | Ratio | Balance |\n`;
         text += `|------|---------|---------|-------|---------|\n`;
-        for (let i = 0; i < pools.length; i++) {
-          const p = pools[i];
-          const total = p.token_a_value + p.token_b_value;
-          const pct = total > 0 ? ((p.token_a_value / total) * 100).toFixed(0) : "50";
-          const bal = deviations[i] < 0.1 ? "BALANCED" : deviations[i] < 0.3 ? "SLIGHT" : "IMBALANCED";
-          text += `| ${p.name} | $${p.token_a_value.toLocaleString()} | $${p.token_b_value.toLocaleString()} | ${pct}/${100 - Number(pct)} | ${bal} |\n`;
+        for (const r of rows) {
+          text += `| ${r.name} | $${r.a.toLocaleString()} | $${r.b.toLocaleString()} | ${r.pctA}/${100 - r.pctA} | ${r.balance} |\n`;
         }
 
-        if (ain >= 70) text += `\n**Verdict:** Pools are well-balanced. Low impermanent loss risk.\n`;
-        else if (ain >= 40) text += `\n**Verdict:** Some imbalance. Monitor for impermanent loss.\n`;
-        else text += `\n**Verdict:** Significant imbalance. High impermanent loss risk — consider rebalancing.\n`;
+        // Verdict cites the table totals so display + summary stay consistent.
+        text += `\n**Verdict:** `;
+        text += `${counts.balanced} of ${rows.length} pools BALANCED`;
+        if (counts.slight > 0) text += `, ${counts.slight} SLIGHT`;
+        if (counts.imbalanced > 0) text += `, ${counts.imbalanced} IMBALANCED`;
+        text += `. Aggregate AIN ${ain}/100 — `;
+        if (ain >= 70) text += `pools are well-balanced overall. Low impermanent loss risk.\n`;
+        else if (ain >= 40) text += `some imbalance present. Monitor for impermanent loss.\n`;
+        else text += `significant imbalance. High impermanent loss risk — consider rebalancing.\n`;
 
-        text += `**Tokens:** ${result.tokens_used}`;
-        addHistory({ tool: "zpl_liquidity", domain: "crypto", results: { pools: pools.map((p) => p.name) }, ain_scores: { liquidity: ain } });
+        text += `\n**Tokens:** ${result.tokens_used}`;
+        // v3.7.2: persist tokens_used so estimateOpTokens reflects reality.
+        addHistory({
+          tool: "zpl_liquidity",
+          domain: "crypto",
+          results: { pools: pools.map((p) => p.name), tokens_used: result.tokens_used, counts },
+          ain_scores: { liquidity: ain },
+        });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -191,7 +215,7 @@ export function registerCryptoTools(server: Server, getClient: () => ZPLEngineCl
         else text += `**Verdict:** Insider-heavy. High concentration risk. Dump potential when vesting unlocks.\n`;
 
         text += `**Tokens:** ${result.tokens_used}`;
-        addHistory({ tool: "zpl_tokenomics", domain: "crypto", results: { token, insiderPct, communityPct }, ain_scores: { [label]: ain } });
+        addHistory({ tool: "zpl_tokenomics", domain: "crypto", results: { token, insiderPct, communityPct, tokens_used: result.tokens_used }, ain_scores: { [label]: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };

@@ -52,7 +52,7 @@ export function registerSecurityTools(server: Server, getClient: () => ZPLEngine
         else text += `**Posture:** Risk heavily concentrated in few components. Critical exposure — patch immediately.\n`;
 
         text += `**Tokens:** ${result.tokens_used}`;
-        addHistory({ tool: "zpl_vuln_map", domain: "security", results: { system_name, components: components.map((c) => c.name) }, ain_scores: { [label]: ain } });
+        addHistory({ tool: "zpl_vuln_map", domain: "security", results: { system_name, components: components.map((c) => c.name), tokens_used: result.tokens_used }, ain_scores: { [label]: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -92,7 +92,7 @@ export function registerSecurityTools(server: Server, getClient: () => ZPLEngine
         text += `\n**Distribution:** ${ain >= 50 ? "Risk is spread across areas" : "Risk concentrated in few areas"}\n`;
         text += `**Tokens:** ${result.tokens_used}`;
 
-        addHistory({ tool: "zpl_risk_score", domain: "security", results: { risks: risks.map((r) => r.name) }, ain_scores: { risk: ain } });
+        addHistory({ tool: "zpl_risk_score", domain: "security", results: { risks: risks.map((r) => r.name), tokens_used: result.tokens_used }, ain_scores: { risk: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -134,7 +134,7 @@ export function registerSecurityTools(server: Server, getClient: () => ZPLEngine
         text += `\n**Average:** ${avgScore.toFixed(1)}% | **Weakest:** ${sorted[0].name} (${sorted[0].score}%)\n`;
         text += `**Tokens:** ${result.tokens_used}`;
 
-        addHistory({ tool: "zpl_compliance", domain: "security", results: { framework, areas: areas.map((a) => a.name) }, ain_scores: { [label]: ain } });
+        addHistory({ tool: "zpl_compliance", domain: "security", results: { framework, areas: areas.map((a) => a.name), tokens_used: result.tokens_used }, ain_scores: { [label]: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };

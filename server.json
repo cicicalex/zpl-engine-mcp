@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.cicicalex/engine",
-  "description": "AIN stability & bias engine — neutrality index for finance, gaming, AI, crypto (63 tools).",
+  "description": "AIN stability & bias engine — neutrality index for finance, gaming, AI, crypto (68 tools, 11 categories).",
   "repository": {
     "url": "https://github.com/cicicalex/zpl-engine-mcp",
     "source": "github"
   },
-  "version": "3.6.1",
+  "version": "4.0.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "zpl-engine-mcp",
-      "version": "3.6.1",
+      "version": "4.0.0",
       "transport": {
         "type": "stdio"
       },

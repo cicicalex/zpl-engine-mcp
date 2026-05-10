@@ -5,6 +5,196 @@ All notable changes to `zpl-engine-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] — 2026-05-10
+
+**MAJOR RELEASE.** Two months of incremental fixes consolidated into one
+clean v4.0 cut. The headline is the funnel-fix: 792 weekly npm downloads
+at time of writing, 0 account signups — every user who ran
+`npx zpl-engine-mcp setup` hit a key-format error and gave up. This
+release ships the regex fix, plus 20 more bugs surfaced in the same
+audit + an autonomous code review session, plus four new top-level
+commands (`whoami`, `repair`, `diagnose`, `--help` / `--version`) so
+future installs fail loud (with actionable next steps) instead of silent.
+
+**21 bugs fixed.** **146 tests** (98 unit + 48 live MCP integration).
+**Cross-OS verified** Windows + Linux Alpine. **Zero behavioural
+regressions** for existing users — legacy `zpl_u_<48hex>` keys still
+work, every existing tool keeps the same input shape and same output
+contract. Why 4.0 instead of 3.7.2: too many surface-area changes
+(new commands, removed dead env var, new config field, security
+regex tightened) to fit comfortably in a patch number, and the funnel
+metrics warrant a fresh "this is the version that actually works"
+release tag.
+
+### Fixed (CRITICAL — funnel-blockers)
+- **API key format validator now accepts wizard-issued keys with type
+  prefixes** (`zpl_u_mcp_`, `zpl_u_cli_`, `zpl_u_default_`). Previous
+  regex `/^zpl_u_[a-f0-9]{48}$/` rejected every key the device-flow
+  wizard generated, surfacing as "Server transport closed unexpectedly"
+  in Claude Desktop logs with no actionable hint. Validation extracted
+  to `src/api-key-format.ts` with 18-test regression suite so this
+  cannot silently regress in v4 work.
+- **Cloudflare HTML responses are now identified explicitly.** Previously
+  a Bot Fight Mode challenge or rate-limit page surfaced as
+  "Engine error 403: Forbidden" with no clue. The new `parseEngineError`
+  helper detects HTML / cf-ray / cf-mitigated headers and returns a
+  message that names the cause and the next step (User-Agent, retry,
+  health check, issue link with cf-ray ID).
+
+### Added
+- **`npx zpl-engine-mcp setup` is now memory-aware.** Detects existing
+  `~/.zpl/config.toml` and offers three choices instead of forcing a
+  fresh device-flow login every time: keep, re-setup, or patch-only.
+  Defaults to "keep" in non-interactive mode (CI / piped input). Pass
+  `--force` to skip the prompt and rotate keys explicitly.
+- **`npx zpl-engine-mcp whoami`** — print which account this install is
+  logged into (email, config path, MCP version) without re-running
+  setup. Useful for sanity-checking after an update.
+- **`npx zpl-engine-mcp repair`** — wipe `~/.zpl/config.toml` and remove
+  the `zpl-engine-mcp` entry from each MCP client config (Claude
+  Desktop, Cursor, Windsurf). Other servers in those configs are left
+  untouched. Confirms before destructive action; pass `--yes` to skip.
+- **Smoke test at the end of `setup`.** After writing config and patching
+  clients, the wizard now hits `/health` and runs a minimum-cost
+  authenticated `/compute` (d=3, samples=100). Catches the rare but
+  devastating case where the wizard succeeds on the website side but
+  the engine doesn't recognise the key yet (replication lag, cache,
+  network split). Prints a clear "the key was saved but engine didn't
+  accept it on first try" message so the user knows whether to wait or
+  re-setup.
+- **`zpl_health` MCP tool** — full diagnostic report covering config
+  source, key format, engine reachability, authenticated probe, and
+  history sanity. Costs 1 token. Designed to be the first thing a user
+  pastes when filing an issue.
+
+### Fixed (audit-surfaced bugs)
+- **`zpl_teach getting-started` referenced the wrong package name**
+  (`@zeropointlogic/engine-mcp` instead of `zpl-engine-mcp`). Users
+  copying the snippet got `npm ERR! 404` because that package never
+  existed. Snippet now matches the actual published name.
+- **Duplicate ZPL entries in client configs are now deduplicated.**
+  Earlier wizard versions and copy-pasted snippets from old docs
+  produced sibling entries like `"ZPL Engine MCP"`,
+  `"@zeropointlogic/engine-mcp"`, `"zpl-engine"` which Claude Desktop
+  loaded all at once → duplicate tools / quota counted twice. The
+  patch step now removes any sibling whose key OR command/args
+  matches our package, then writes the canonical
+  `"zpl-engine-mcp"` entry.
+- **`zpl_quota` token estimate** previously hardcoded `+= 5` per
+  history entry, undercounting by 3-100x depending on tool dimension.
+  Replaced with `estimateOpTokens(entry)` which prefers persisted
+  `tokens_used` and falls back to a tool-shape heuristic only when the
+  tool didn't save it. `zpl_alert` uses the same helper so the two
+  tools agree.
+- **`zpl_quota` plan detection** now reads from `~/.zpl/config.toml`
+  when `ZPL_PLAN` env isn't set (was previously env-only, defaulting
+  silently to "free"). Engine `/api/me` endpoint pending — once
+  available, plan will auto-detect from the server.
+- **`zpl_simulate` switched from `directionalBias` to `distributionBias`.**
+  Most "what-if" inputs are positive-only values (portfolio allocations,
+  team compositions, game balance) where `directionalBias` collapsed
+  to 1.0 and the engine returned AIN ≈ 0 for both sides — visible as
+  the "0/0" bug. `distributionBias` measures distance from uniform,
+  which is what users want here. Also short-circuits on identical
+  baseline/modified arrays so we don't burn tokens computing twice for
+  a guaranteed delta=0.
+- **`zpl_liquidity` table is now coherent with the verdict line.**
+  Previously the table showed per-pool BALANCED/SLIGHT/IMBALANCED
+  status (based on local deviation) while the verdict only paraphrased
+  the aggregate AIN — the two could disagree on mixed pools. Verdict
+  now cites the actual table totals (e.g. "3 of 5 pools BALANCED, 2
+  IMBALANCED — aggregate AIN 47/100"). `tokens_used` now persists to
+  history so quota estimates stay accurate.
+
+### Removed
+- **`ZPL_LANGUAGE` env constant deleted** — was read at module load and
+  never consumed anywhere (P2 finding from 2026-04-18 audit). When
+  i18n is wired through tool descriptions / `ainSignal` bands,
+  reintroduce as `LANG` and pipe through `helpers.ts` so all tools
+  share one source of truth.
+
+### Security (PHASE 3.2 audit)
+- **Secret sanitizer regex was leaking wizard-issued ZPL keys.** The pattern
+  `/zpl_[us]_[a-f0-9]{20,}/gi` in `addHistory` failed on `zpl_u_mcp_*`,
+  `zpl_u_cli_*`, `zpl_u_default_*` because the first non-hex letter after
+  `zpl_u_` broke the match. Result: if any tool ever stuffed the API key
+  into its `results` payload (e.g. via accidental debug logging), it would
+  persist to `~/.zpl-engine/history.json` in clear text. Updated to
+  `/zpl_[us]_(?:[a-z]+_)?[a-f0-9]{20,}/gi` — now redacts every shape the
+  format validator accepts.
+- **Anthropic / Stripe key sanitizer was truncating at the first hyphen.**
+  `/sk-[A-Za-z0-9]+/gi` matched only `sk-ant` of `sk-ant-api03-AbCd...`
+  and left the bulk of the key in clear text. Char class now includes
+  `-` and `_`. Added explicit Stripe pattern (`sk_live_*`, `sk_test_*`).
+- **Numeric env-var coercions now have safe bounds.** `ZPL_RATE_LIMIT`
+  clamped to [1, 600] and `ZPL_MAX_RETRIES` to [0, 5]. Previously a typo
+  like `ZPL_RATE_LIMIT=-1` produced `callLog.length >= -1` (always true)
+  → rate limiter always blocked, OR `=999999` disabled the cap entirely.
+
+### Tools (estimateOpTokens accuracy)
+- **22 tools across 8 files** now persist `tokens_used` in their
+  `addHistory()` results (zpl_decide, zpl_compare, zpl_rank, zpl_versus,
+  zpl_model_bias, zpl_dataset_audit, zpl_prompt_test, zpl_benchmark,
+  zpl_whale_check, zpl_defi_risk, zpl_tokenomics, zpl_portfolio,
+  zpl_fear_greed, zpl_forex_pair, zpl_sector_bias, zpl_macro,
+  zpl_correlation, zpl_market_scan, zpl_loot_table, zpl_matchmaking,
+  zpl_economy_check, zpl_pvp_balance, zpl_gacha_audit, zpl_rng_test,
+  zpl_vuln_map, zpl_risk_score, zpl_compliance, zpl_debate, zpl_news_bias,
+  zpl_review_bias, zpl_check_response, zpl_batch). Fixes the
+  cascading effect where `zpl_quota` and `zpl_alert` undercounted
+  monthly token usage by 3-100x because each tool only fed back the
+  fallback heuristic from `estimateOpTokens` rather than the engine's
+  actual token cost. AI Eval tools (`tools/eval.ts`) deferred to
+  v3.7.3 (different result shape, requires more careful refactor).
+
+### CLI UX
+- **`--help` / `-h` / `help`** — print usage + exit 0. POSIX expectation;
+  pre-3.7.2 these flags fell through to the MCP main loop and hung.
+- **`--version` / `-v` / `version`** — print just the version string
+  + exit 0.
+
+### Tests
+- **34 → 98 tests** (+64). New regression suites:
+  - `test/api-key-format.test.mjs` (18 tests)
+  - `test/config-toml.test.mjs` (9 tests)
+  - `test/estimate-tokens.test.mjs` (8 tests)
+  - `test/dedupe-mcp-entries.test.mjs` (5 tests)
+  - `test/cloudflare-error.test.mjs` (6 tests)
+  - `test/setup-memory.test.mjs` (4 tests)
+  - `test/source-regressions.test.mjs` (10 tests)
+  - `test/edge-cases.test.mjs` (12 tests) — `--help` / `--version` /
+    safety bounds (ZPL_RATE_LIMIT=-1, =999999, garbage) / hostile
+    ZPL_ENGINE_URL / repair preserves siblings
+  - `test/sanitize-secrets.test.mjs` (8 tests) — every key shape we redact
+- **Integration suite added** (`test/integration-smoke.test.mjs`, 42 tests):
+  spawns the real MCP via stdio, sends JSON-RPC, exercises ~3 tools per
+  category (META, CORE, ADVANCED, CRYPTO, UNIVERSAL, FINANCE, GAMING,
+  SECURITY, AI/ML — 38 distinct tools live-tested across 9 categories).
+  Rate-limit-aware (Cloudflare 60/min cap respected via 1.5s delay
+  between calls; CF-blocked calls treated as "Bug #8 detection working
+  as designed" rather than failures).
+
+### Cross-OS verified
+- Windows (dev machine).
+- Linux Alpine (Hetzner Docker `node:20-alpine`) — full re-test of
+  `--version`, `--help`, `whoami` (with + without config), setup memory
+  feature, `setup --force` device-flow opening, `repair --yes` with
+  preservation of unrelated mcpServers entries.
+
+### Internal
+- API key validation extracted from `src/index.ts` to
+  `src/api-key-format.ts` so it can be unit-tested in isolation.
+- `parseEngineError` exported from `src/engine-client.ts` for testability.
+- `readExistingConfig` exported from `src/setup.ts` for testability.
+- `patchAllClients` extracted from `runSetup` so memory-aware setup,
+  `--force` setup, and patch-only flow all share the same client-patching
+  logic.
+- Config TOML reader factored into reusable `parseTomlString(field)`
+  so future fields (`plan`, future user-prefs) don't each invent their
+  own parser.
+- `estimateOpTokens(entry)` helper in `store.ts` — single source of
+  truth for token-cost heuristics used by `zpl_quota` and `zpl_alert`.
+
 ## [3.7.0] — 2026-04-18
 
 ### Added

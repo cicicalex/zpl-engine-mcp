@@ -58,7 +58,15 @@ export interface EngineError {
   code: number;
 }
 
-const RATE_LIMIT_PER_MIN = Number(process.env.ZPL_RATE_LIMIT) || 60;
+// v3.7.2: bound to [1, 600] so a typo (`ZPL_RATE_LIMIT=-1` or `=999999`) can't
+// disable the cap or starve the engine. 600/min = 10/sec is plenty for any
+// legitimate human + AI use; abusive callers bounce off the engine's own cap.
+function safeRateLimit(): number {
+  const raw = Number(process.env.ZPL_RATE_LIMIT);
+  if (!Number.isFinite(raw) || raw <= 0) return 60;
+  return Math.max(1, Math.min(600, Math.floor(raw)));
+}
+const RATE_LIMIT_PER_MIN = safeRateLimit();
 const callLog: number[] = [];
 
 function checkRateLimit(): boolean {
@@ -71,6 +79,63 @@ function checkRateLimit(): boolean {
   return true;
 }
 
+/**
+ * Parse a non-OK fetch response into a clear, actionable error message.
+ *
+ * Engine returns JSON `{error, code}` for its own failures. But when the
+ * request is intercepted by Cloudflare (Bot Fight Mode challenge, rate
+ * limit, "under attack" mode, or origin offline) the body is HTML — the
+ * generic JSON parse falls back to `res.statusText`, which leaves users
+ * staring at "Engine error 403: Forbidden" with no actionable next step.
+ *
+ * v3.7.2: detect HTML/Cloudflare bodies explicitly and return a message
+ * that tells the user what actually happened and how to fix it.
+ *
+ * Exported so unit tests can feed it synthetic Response objects without
+ * hitting the network.
+ */
+export async function parseEngineError(res: Response): Promise<string> {
+  const ct = res.headers.get("content-type") ?? "";
+  const isHtml = ct.includes("text/html");
+  const cfRay = res.headers.get("cf-ray");
+  const cfMitigated = res.headers.get("cf-mitigated"); // "challenge" / "block"
+
+  if (isHtml || cfMitigated || (cfRay && res.status >= 400)) {
+    let snippet = "";
+    try {
+      const body = await res.text();
+      // Look for tell-tale Cloudflare strings without dumping the whole HTML.
+      if (/Just a moment|Checking your browser|cf-browser-verification|cf_chl_/i.test(body)) {
+        snippet = "Cloudflare browser challenge intercepted the request";
+      } else if (/Attention Required|cloudflare/i.test(body)) {
+        snippet = "Cloudflare blocked the request";
+      } else {
+        snippet = "Cloudflare returned an HTML page instead of JSON";
+      }
+    } catch { /* body read failure — keep generic message */ }
+    const ray = cfRay ? ` (cf-ray: ${cfRay})` : "";
+    return [
+      `Engine ${res.status} via Cloudflare${ray}: ${snippet}.`,
+      "",
+      "Likely causes & fixes:",
+      "  • Your User-Agent looks like a bot. The MCP sends a Mozilla-compat UA;",
+      "    if you're calling the engine yourself, set a browser-like User-Agent.",
+      "  • Your IP hit Cloudflare rate limits. Wait 60 seconds and retry.",
+      "  • Engine is temporarily unreachable. Check https://engine.zeropointlogic.io/health",
+      "  • If this persists, report at https://github.com/cicicalex/zpl-engine-mcp/issues",
+      ray ? `  • Include cf-ray ${cfRay} in any bug report.` : "",
+    ].filter(Boolean).join("\n");
+  }
+
+  // Standard JSON error path.
+  try {
+    const err = await res.json() as EngineError;
+    return `Engine error ${res.status}: ${err.error ?? res.statusText}`;
+  } catch {
+    return `Engine error ${res.status}: ${res.statusText}`;
+  }
+}
+
 export class ZPLEngineClient {
   private baseUrl: string;
   private apiKey: string;
@@ -79,7 +144,11 @@ export class ZPLEngineClient {
   constructor(apiKey: string, baseUrl = "https://engine.zeropointlogic.io") {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl.replace(/\/$/, "");
-    this.maxRetries = Number(process.env.ZPL_MAX_RETRIES) || 2;
+    // v3.7.2: bounded so a typo can't thrash the engine with retry storms.
+    const rawRetries = Number(process.env.ZPL_MAX_RETRIES);
+    this.maxRetries = Number.isFinite(rawRetries) && rawRetries >= 0
+      ? Math.max(0, Math.min(5, Math.floor(rawRetries)))
+      : 2;
   }
 
   private headers(): Record<string, string> {
@@ -129,8 +198,7 @@ export class ZPLEngineClient {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText, code: res.status })) as EngineError;
-        throw new Error(`Engine error ${res.status}: ${err.error}`);
+        throw new Error(await parseEngineError(res));
       }
 
       return res.json() as Promise<ComputeResponse>;
@@ -152,8 +220,7 @@ export class ZPLEngineClient {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText, code: res.status })) as EngineError;
-        throw new Error(`Engine error ${res.status}: ${err.error}`);
+        throw new Error(await parseEngineError(res));
       }
 
       return res.json() as Promise<SweepResponse>;
@@ -166,7 +233,7 @@ export class ZPLEngineClient {
         redirect: "error",
         signal: AbortSignal.timeout(5000),
       });
-      if (!res.ok) throw new Error(`Engine unreachable: ${res.status}`);
+      if (!res.ok) throw new Error(await parseEngineError(res));
       return res.json() as Promise<HealthResponse>;
     }, 5000);
   }
@@ -177,7 +244,7 @@ export class ZPLEngineClient {
         headers: this.headers(),
         redirect: "error",
       });
-      if (!res.ok) throw new Error(`Failed to fetch plans: ${res.status}`);
+      if (!res.ok) throw new Error(await parseEngineError(res));
       const data = await res.json() as { plans: PlanInfo[] };
       return data.plans;
     }, 10000);

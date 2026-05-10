@@ -40,7 +40,7 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
         text += `\n**Overall Stability:** ${result.ain_status} | **Tokens:** ${result.tokens_used}`;
 
         const scores: Record<string, number> = { overall: ain };
-        addHistory({ tool: "zpl_market_scan", domain: "finance", results: { market, assets }, ain_scores: scores });
+        addHistory({ tool: "zpl_market_scan", domain: "finance", results: { market, assets, tokens_used: result.tokens_used }, ain_scores: scores });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -86,7 +86,7 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
         else if (ain >= 40) text += `\n\n*Some concentration risk — consider rebalancing.*`;
         else text += `\n\n*High concentration risk — portfolio heavily skewed.*`;
 
-        addHistory({ tool: "zpl_portfolio", domain: "finance", results: { allocations }, ain_scores: { portfolio: ain } });
+        addHistory({ tool: "zpl_portfolio", domain: "finance", results: { allocations, tokens_used: result.tokens_used }, ain_scores: { portfolio: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -138,7 +138,7 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
         }
 
         text += `\n**Tokens:** ${result.tokens_used} | **Status:** ${result.ain_status}`;
-        addHistory({ tool: "zpl_fear_greed", domain: "finance", results: { fng_value }, ain_scores: { fear_greed: ain } });
+        addHistory({ tool: "zpl_fear_greed", domain: "finance", results: { fng_value, tokens_used: result.tokens_used }, ain_scores: { fear_greed: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -172,7 +172,7 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
         if (spread_pips) text += `**Spread:** ${spread_pips} pips\n`;
         text += `\n**Data points:** ${changes.length} | **Tokens:** ${result.tokens_used}`;
 
-        addHistory({ tool: "zpl_forex_pair", domain: "finance", results: { pair, direction }, ain_scores: { [pair]: ain } });
+        addHistory({ tool: "zpl_forex_pair", domain: "finance", results: { pair, direction, tokens_used: result.tokens_used }, ain_scores: { [pair]: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -210,7 +210,7 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
         text += `\n**Rotation signal:** ${ain >= 60 ? "Balanced rotation" : ain >= 40 ? "Moderate rotation bias" : "Heavy sector concentration"}\n`;
         text += `**Tokens:** ${result.tokens_used}`;
 
-        addHistory({ tool: "zpl_sector_bias", domain: "finance", results: { sectors: sectors.map((s) => s.name) }, ain_scores: { sectors: ain } });
+        addHistory({ tool: "zpl_sector_bias", domain: "finance", results: { sectors: sectors.map((s) => s.name), tokens_used: result.tokens_used }, ain_scores: { sectors: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -261,7 +261,7 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
         }
         text += `\n**Stability:** ${result.ain_status} | **Tokens:** ${result.tokens_used}`;
 
-        addHistory({ tool: "zpl_macro", domain: "finance", results: { country, indicators: indicators.map((i) => i.name) }, ain_scores: { [label]: ain } });
+        addHistory({ tool: "zpl_macro", domain: "finance", results: { country, indicators: indicators.map((i) => i.name), tokens_used: result.tokens_used }, ain_scores: { [label]: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -310,7 +310,7 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
         else text += `**High correlation** — assets move together. Portfolio acts like single asset. Concentration risk!\n`;
 
         text += `\n**Tokens:** ${result.tokens_used}`;
-        addHistory({ tool: "zpl_correlation", domain: "finance", results: { assets: assets.map((a) => a.name) }, ain_scores: { correlation: ain } });
+        addHistory({ tool: "zpl_correlation", domain: "finance", results: { assets: assets.map((a) => a.name), tokens_used: result.tokens_used }, ain_scores: { correlation: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
