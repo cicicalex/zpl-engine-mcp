@@ -5,6 +5,7 @@
  */
 
 import { sanitizeSecrets } from "./store.js";
+import { USER_AGENT } from "./user-agent.js";
 
 export interface ComputeRequest {
   d: number;       // dimension 3-100
@@ -102,7 +103,15 @@ export async function parseEngineError(res: Response): Promise<string> {
   const cfRay = res.headers.get("cf-ray");
   const cfMitigated = res.headers.get("cf-mitigated"); // "challenge" / "block"
 
-  if (isHtml || cfMitigated || (cfRay && res.status >= 400)) {
+  // v4.1.1 FIX: pre-v4.1.1 we used `(cfRay && res.status >= 400)` as a CF-block
+  // signal. But Cloudflare adds cf-ray to EVERY response (it's the request ID
+  // header), so a normal origin JSON error like
+  //   HTTP/1.1 403  Content-Type: application/json
+  //   {"error":"API key not found or inactive"}
+  // was being mis-categorized as a Cloudflare HTML challenge — and the user
+  // never saw the actual "API key not found" message. Only flag CF when the
+  // body IS html or cf-mitigated explicitly says "challenge"/"block".
+  if (isHtml || cfMitigated) {
     let snippet = "";
     try {
       const body = await res.text();
@@ -162,6 +171,12 @@ export class ZPLEngineClient {
     return {
       "Authorization": `Bearer ${this.apiKey}`,
       "Content-Type": "application/json",
+      // CRITICAL: Cloudflare Bot Fight Mode on engine.zeropointlogic.io
+      // 403s any UA that doesn't start with "Mozilla/". Pre-v4.1.1 this
+      // header was missing, so /compute and /sweep were silently blocked
+      // for every user. parseEngineError correctly diagnosed it as
+      // "User-Agent looks like a bot" — but the bot was us. Now fixed.
+      "User-Agent": USER_AGENT,
     };
   }
 

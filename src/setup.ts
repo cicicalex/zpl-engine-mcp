@@ -45,10 +45,11 @@ const POLL_MAX_INTERVAL_MS = 10_000;    // cap interval_s so a stuck server does
 // Cloudflare Bot Fight Mode is enabled on zeropointlogic.io and blocks any
 // User-Agent that doesn't start with "Mozilla/". Node's default fetch UA
 // ("node") gets a 403 challenge page, which silently breaks the wizard.
-// Using the browser-compat "Mozilla/5.0 (compatible; ...)" pattern — same
-// convention used by well-behaved crawlers (bingbot, slackbot, etc.) — lets
-// us identify the tool while still clearing the challenge.
-const USER_AGENT = `Mozilla/5.0 (compatible; zpl-engine-mcp/${getMcpPackageVersion()}; +https://github.com/cicicalex/zpl-engine-mcp)`;
+// v4.1.1: USER_AGENT moved to src/user-agent.ts so setup.ts (device flow
+// against zeropointlogic.io) AND engine-client.ts (every /compute call)
+// share the SAME Mozilla envelope. Pre-v4.1.1 only setup had the UA;
+// engine-client made bare Node-UA fetch calls and got Cloudflare-403'd.
+import { USER_AGENT } from "./user-agent.js";
 
 // ---------------------------------------------------------------------------
 // Backend shape — mirrors /api/auth/cli/start and /api/auth/cli/status

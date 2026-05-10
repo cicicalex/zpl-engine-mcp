@@ -5,6 +5,46 @@ All notable changes to `zpl-engine-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.1] — 2026-05-10
+
+Patch release surfacing two real bugs discovered during the v4.1.0 +
+v1.1.1 paired test pass (5 test categories × 2 packages, ~180 unit
+tests + live engine probes). Both bugs were silent — they did not
+crash, they just produced wrong / misleading output. Patched here so
+the next release of either client surfaces real engine errors instead
+of false-positive Cloudflare misdirection.
+
+### Fixed
+
+- **`parseEngineError` mis-classified ALL 4xx with `cf-ray` as a
+  Cloudflare HTML challenge.** Cloudflare adds the `cf-ray` request-ID
+  header to EVERY response, including normal origin JSON errors. Our
+  guard `(cfRay && res.status >= 400)` thus fired even when the engine
+  returned a perfectly readable JSON error like
+    `HTTP/1.1 403  Content-Type: application/json`
+    `{"error":"API key not found or inactive"}`
+  …and the user saw a confusing "Cloudflare returned an HTML page"
+  message instead of "API key not found or inactive". Result: users
+  with a stale or revoked key thought they had a network / WAF problem
+  and didn't run `npx zpl-engine-mcp setup --force` to refresh.
+
+  Fix: only treat as Cloudflare when the body actually IS HTML
+  (`Content-Type: text/html`) OR when `cf-mitigated` explicitly says
+  `challenge` / `block`. The `cf-ray` signal is no longer used for
+  classification — it's still surfaced in the message when CF is
+  detected, just doesn't gate the path anymore.
+
+- **`engine-client.ts` was missing the `User-Agent` header on every
+  fetch.** `setup.ts` had a Mozilla-compat UA for the device flow on
+  zeropointlogic.io, but engine-client (which talks to
+  engine.zeropointlogic.io for `/compute`, `/sweep`, `/health`,
+  `/plans`) sent Node's default `node` UA. If Cloudflare ever turned
+  on Bot Fight Mode for the engine subdomain, every real scoring call
+  would 403 silently. The error message in `parseEngineError` even
+  said "MCP sends a Mozilla-compat UA" — but the code didn't deliver.
+  Now it does: USER_AGENT is shared via `src/user-agent.ts`. Defence
+  in depth — fixed before the WAF rule lands, not after.
+
 ## [4.1.0] — 2026-05-10
 
 Sister release to `zpl-engine-cli@1.1.0` — closes the same enterprise +
