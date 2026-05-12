@@ -608,6 +608,28 @@ export async function runSetup(opts: SetupOptions = {}): Promise<void> {
 
   await patchAllClients(approved.api_key);
 
+  // v4.1.5: ping /api/auth/cli/heartbeat so ZPL Main can record this
+  // install as "successfully paired" — distinct from "ever made a
+  // /compute call." Gives Alex the npm-download → paired-and-installed
+  // funnel ratio in /admin/users + /dashboard/security Recent activity.
+  // Fire-and-forget; never blocks the setup happy path.
+  try {
+    const heartbeatVersion = getMcpPackageVersion();
+    await fetch(`${BACKEND_BASE}/api/auth/cli/heartbeat`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${approved.api_key}`,
+        "Content-Type": "application/json",
+        "User-Agent": USER_AGENT,
+      },
+      body: JSON.stringify({ client: "mcp", version: heartbeatVersion }),
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch {
+    // Telemetry is best-effort. A blocked outbound, a 429, or a
+    // proxy that strips Authorization headers should never break setup.
+  }
+
   // v3.7.2: smoke-test the freshly-issued key against the engine. Catches
   // the (rare but devastating) case where the wizard succeeds on the
   // website side but the engine doesn't recognise the key yet (replication
