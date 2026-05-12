@@ -9,10 +9,22 @@ import { distributionBias, clampD, ainSignal, maybeRedactForPureMode } from "./h
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
 
-/** Analyze text with 6-factor weighted bias (gradient, not binary).
- *  Multilingual: EN + RO + FR + DE + ES + IT keyword detection.
- *  Adds symmetric uniformity penalty: texts that are 100% positive OR 100% negative
- *  (propaganda pattern, regardless of language) get a uniformity bonus to bias score. */
+/**
+ * Client-side preprocessing — converts raw text into a small set of normalized
+ * inputs (dimension, bias) that the engine accepts. The engine itself is a
+ * trade secret; this function does NOT mirror or approximate engine logic.
+ *
+ * What this preprocessor does (client-side only, fully open):
+ *   - Tokenises and matches a multilingual sentiment word list (EN/RO/FR/DE/ES/IT).
+ *   - Produces a single bias number for the engine to consume.
+ *   - Adds a symmetric "all-positive OR all-negative" detector — common
+ *     propaganda pattern regardless of language.
+ *
+ * Why preprocessing lives client-side: the engine accepts numeric parameters,
+ * not raw text. Doing the text → number step on the client keeps the engine
+ * stateless and the surface area small. None of this code reflects how the
+ * engine computes AIN — that stays on the server.
+ */
 function analyzeText(text: string) {
   const words = text.split(/\s+/).length;
   const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);

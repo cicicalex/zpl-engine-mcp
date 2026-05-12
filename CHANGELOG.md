@@ -497,7 +497,7 @@ Bug-fix pass. No behaviour changes to documented APIs; all 67 tools preserved.
 - `zpl_sweep` and `zpl_analyze` now also honour the per-minute rate limiter (previously only `zpl_compute` was rate-limited).
 
 ### Removed
-- `*Analyzed by ZPL Engine v3 — 8N+3 theorem*` footer from `zpl_check_response`. The reference hinted at engine internals; replaced with a plain `*Analyzed by ZPL Engine*`.
+- A footer string that hinted at engine internals from `zpl_check_response`. Replaced with a plain `*Analyzed by ZPL Engine*`. Engine internals are a trade secret and no client-side artifact should reference them.
 
 ## [3.4.0] — 2026-04-15
 
