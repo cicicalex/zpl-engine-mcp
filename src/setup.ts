@@ -319,6 +319,33 @@ async function writeConfigToml(apiKey: string, userEmail: string): Promise<strin
  */
 type PatchResult = "updated" | "created" | "manual" | "malformed";
 
+/**
+ * On POSIX, lock the patched config file to owner-only (mode 0o600).
+ * The file holds ZPL_API_KEY in plaintext under `env`, so default umask
+ * (typically 0o644) on a shared box would expose it to other UIDs. We
+ * chmod after every write — best-effort, never fatal (Windows NTFS no-op).
+ *
+ * On POSIX systems we ALSO log a warning if the pre-existing perms were
+ * too open, so a user who hand-set 644 sees that we're tightening it.
+ */
+async function chmodPrivateBestEffort(path: string): Promise<void> {
+  if (platform() === "win32") return; // NTFS ACLs handle privacy at home-dir level
+  try {
+    const st = await stat(path).catch(() => null);
+    if (st && (st.mode & 0o077)) {
+      logErr(
+        `  (note: tightening permissions on ${path} from ${(st.mode & 0o777)
+          .toString(8)
+          .padStart(4, "0")} to 0600 — file contains your ZPL_API_KEY)`,
+      );
+    }
+    await chmod(path, 0o600);
+  } catch {
+    // Ignore — failure to chmod doesn't block setup; the worst case
+    // matches the pre-fix behaviour.
+  }
+}
+
 export async function patchMcpConfigFile(
   path: string,
   apiKey: string,
@@ -350,6 +377,7 @@ export async function patchMcpConfigFile(
     if (existing.trim().length === 0) {
       const fresh: ClaudeDesktopConfig = { mcpServers: { "zpl-engine-mcp": entry } };
       await writeFile(path, JSON.stringify(fresh, null, 2), "utf-8");
+      await chmodPrivateBestEffort(path);
       return { result: "created", path };
     }
     let parsed: ClaudeDesktopConfig;
@@ -384,6 +412,7 @@ export async function patchMcpConfigFile(
     }
     parsed.mcpServers["zpl-engine-mcp"] = entry;
     await writeFile(path, JSON.stringify(parsed, null, 2), "utf-8");
+    await chmodPrivateBestEffort(path);
     return { result: "updated", path };
   }
 
@@ -399,6 +428,7 @@ export async function patchMcpConfigFile(
   // Parent exists, file doesn't — write a fresh config.
   const fresh: ClaudeDesktopConfig = { mcpServers: { "zpl-engine-mcp": entry } };
   await writeFile(path, JSON.stringify(fresh, null, 2), "utf-8");
+  await chmodPrivateBestEffort(path);
   return { result: "created", path };
 }
 
