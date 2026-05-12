@@ -86,27 +86,37 @@ export async function loadPlan(): Promise<string> {
 }
 
 /**
- * Load the API key. Config file wins over env var when both exist and the
- * config file contains a non-empty key. Env var is the fallback so legacy
- * installs keep working.
+ * Load the API key. v4.1.7 (audit 2026-05-13): aligned precedence with
+ * the CLI — ENV wins over file. Previously MCP did file-wins-over-env,
+ * which meant a dual-tool user with `ZPL_API_KEY=staging` in shell and a
+ * prod key in `~/.zpl/config.toml` saw CLI hit staging but MCP hit prod.
+ * Same machine, same file, same env var, different behaviour. v4.1.7
+ * flips MCP so both tools resolve identically: env first (12-factor
+ * standard), config.toml as fallback.
+ *
+ * Migration impact: zero for normal users (most have ONE source). Users
+ * who relied on file-wins must `unset ZPL_API_KEY` before running MCP
+ * via `npx`. The setup wizard still writes config.toml first; that path
+ * is unchanged.
  */
 export async function loadApiKey(): Promise<LoadedApiKey> {
+  // 1. Env var first (12-factor; aligns with CLI).
+  const envKey = resolveZplApiKey();
+  if (envKey) return { key: envKey, source: "env" };
+
+  // 2. Fallback to config.toml written by `npx zpl-engine-mcp setup`.
   const path = getConfigPath();
   try {
     const raw = await readFile(path, "utf-8");
     const key = parseApiKeyFromToml(raw);
     if (key) return { key, source: "config" };
-    // File exists but no api_key line — warn and fall through.
-    console.error(`[zpl-engine-mcp] ${path} exists but has no api_key. Falling back to env var.`);
+    console.error(`[zpl-engine-mcp] ${path} exists but has no api_key.`);
   } catch (err: unknown) {
-    // ENOENT is expected on fresh installs — silent. Other errors warn.
     const code = (err as NodeJS.ErrnoException)?.code;
     if (code && code !== "ENOENT") {
       console.error(`[zpl-engine-mcp] could not read ${path}: ${code}`);
     }
   }
 
-  const envKey = resolveZplApiKey();
-  if (envKey) return { key: envKey, source: "env" };
   return { key: "", source: "none" };
 }

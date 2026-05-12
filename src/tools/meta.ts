@@ -9,7 +9,7 @@ import { ZPLEngineClient } from "../engine-client.js";
 import { resolveZplApiKey } from "../env-keys.js";
 import { loadPlan } from "../config.js";
 import { getValidatedEngineBaseUrl } from "../engine-url.js";
-import { getMcpPackageVersion } from "../package-meta.js";
+import { getMcpPackageJsonPath, getMcpPackageVersion } from "../package-meta.js";
 import { getHistory, addHistory, estimateOpTokens } from "../store.js";
 
 /** Plan details — MUST match constants.ts on ZPL Main website */
@@ -168,6 +168,8 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
       lines.push(`# ZPL MCP Health Check`);
       lines.push("");
       lines.push(`**MCP version:** ${getMcpPackageVersion()}`);
+      lines.push(`**package.json:** \`${getMcpPackageJsonPath()}\``);
+      lines.push(`**Node entry (argv[1]):** \`${process.argv[1] ?? "unknown"}\``);
       lines.push("");
 
       // 1. Config presence (env vs config.toml)
