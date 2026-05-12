@@ -147,7 +147,40 @@ export async function parseEngineError(res: Response): Promise<string> {
   // chat-export logs) to read.
   try {
     const err = await res.json() as EngineError;
-    return sanitizeSecrets(`Engine error ${res.status}: ${err.error ?? res.statusText}`);
+    const raw = err.error ?? res.statusText;
+
+    // v4.1.4: friendly upgrade nudge when the user hits their monthly quota.
+    // The engine returns 403 with "Token limit exceeded: X/Y used this month"
+    // which is technically accurate but unhelpful — the user has no idea
+    // where to upgrade, and seeing "Forbidden" in Claude Desktop is hostile.
+    // Convert that single class of error into a clear actionable message.
+    // (audit complet 12.05 — discoverability finding.)
+    if (/token limit exceeded/i.test(raw)) {
+      // Try to pull the used/limit numbers out so the user sees how close they
+      // were. Format: "Token limit exceeded: 5000/5000 used this month".
+      const m = raw.match(/(\d+)\s*\/\s*(\d+)/);
+      const used = m?.[1];
+      const limit = m?.[2];
+      const usage = used && limit ? ` (${used} / ${limit} tokens used this month)` : "";
+      return sanitizeSecrets(
+        [
+          `You've hit your monthly ZPL Engine quota${usage}.`,
+          "",
+          "Upgrade options:",
+          "  • Basic   $10/mo   10,000 tokens",
+          "  • Pro     $29/mo   50,000 tokens   ← most popular",
+          "  • GamePro $69/mo  150,000 tokens",
+          "  • Studio $149/mo  500,000 tokens",
+          "",
+          "Upgrade in one click: https://zeropointlogic.io/pricing",
+          "Or buy a one-off token pack: https://zeropointlogic.io/dashboard/billing",
+          "",
+          "Your quota resets on the first of next month.",
+        ].join("\n"),
+      );
+    }
+
+    return sanitizeSecrets(`Engine error ${res.status}: ${raw}`);
   } catch {
     return `Engine error ${res.status}: ${res.statusText}`;
   }

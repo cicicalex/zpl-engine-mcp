@@ -1,6 +1,6 @@
 {
   "name": "zpl-engine-mcp",
-  "version": "4.1.3",
+  "version": "4.1.4",
   "mcpName": "io.github.cicicalex/engine",
   "description": "MCP server for the ZPL stability engine — AIN bias detection & neutrality scoring for finance, gaming, AI/ML, security, crypto. 68 tools across 11 categories. Plug into Claude Desktop / Cursor / Windsurf in 10 seconds via `npx zpl-engine-mcp setup`. Free plan: 5000 tokens/month, no card. v4.1 adds HTTP_PROXY/HTTPS_PROXY support (enterprise users behind corporate proxies), top-level error sanitization, and SECURITY.md.",
   "type": "module",
