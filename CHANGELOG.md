@@ -5,6 +5,48 @@ All notable changes to `zpl-engine-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.4] — 2026-05-12
+
+Funnel finding from the 12.05 audit: when a free-tier user runs out of
+their monthly token budget, the engine returns HTTP 403 with the body
+"Token limit exceeded: X/Y used this month". The MCP surfaced that raw
+to Claude Desktop as a generic "Engine error 403", giving the user no
+hint that they had simply hit a quota and could upgrade. Most users in
+that state silently churn — the most engaged segment lost at the
+precise moment they were ready to convert.
+
+### Fixed
+
+- `parseEngineError()` in `engine-client.ts` now detects the
+  `/token limit exceeded/i` pattern and replaces the raw message with a
+  friendly multi-line block containing a plan ladder
+  (Basic $10 → GamePro $69 → Studio $149), a direct link to
+  `https://zeropointlogic.io/pricing`, a fallback one-off pack link,
+  and a note about the monthly quota reset.
+- Numbers are parsed out of the engine response (`5000/5000`) so the
+  message can show the actual usage if available.
+
+No other surface changes. Engine response shape and the rest of the
+MCP tool catalog are unaffected.
+
+## [4.1.3] — 2026-05-12
+
+Security finding from the 12.05 audit: the `setup` wizard wrote
+`ZPL_API_KEY` in plaintext to `claude_desktop_config.json`,
+`~/.cursor/mcp.json`, and `~/.codeium/windsurf/mcp_config.json`
+with the user's default umask. On a multi-user POSIX box those
+files come out 0o644 — every UID on the machine could `cat` the
+file and read a working API key.
+
+### Fixed
+
+- New `chmodPrivateBestEffort()` helper that runs after every
+  successful patch of a client config. POSIX-only (Windows NTFS
+  ACLs already protect the per-user home directory).
+- Logs a one-line note when tightening permissions on an
+  already-existing file so the user sees what the wizard did.
+- Best-effort; failure to chmod does not block setup.
+
 ## [4.1.2] — 2026-05-11
 
 Implements ADR 0002 (`zpl-engine-sdk/docs/adr/0002-x-zpl-client-headers.md`)
