@@ -59,6 +59,10 @@ interface StartResponse {
   device_code: string;
   user_code: string;
   verification_uri: string;
+  /** RFC 8628 §3.2 — backend-supplied complete URL with user_code prefilled.
+   * Optional for backwards compat; prefer this when present so a change in
+   * URL shape (e.g. signed code, /auth/v2/...) doesn't break older installs. */
+  verification_uri_complete?: string;
   interval_s: number;
   expires_at: string; // ISO timestamp
 }
@@ -227,6 +231,7 @@ async function startDeviceFlow(): Promise<StartResponse> {
     device_code: data.device_code,
     user_code: data.user_code,
     verification_uri: data.verification_uri,
+    verification_uri_complete: data.verification_uri_complete,
     interval_s: Math.max(1, Math.min(30, data.interval_s ?? 2)),
     expires_at: data.expires_at ?? new Date(Date.now() + POLL_TIMEOUT_MS).toISOString(),
   };
@@ -242,6 +247,12 @@ async function pollStatus(deviceCode: string): Promise<StatusResponse> {
     // Surface as a pending-like object so the caller keeps polling on transient 5xx;
     // a final "expired" will end the loop correctly.
     if (res.status >= 500) return { status: "pending" };
+    // RFC 8628 §3.5: 429 means slow_down — keep polling, just at the next
+    // interval. Pre-fix this fell into the throw path below and only "worked"
+    // because the outer try/catch in waitForApproval logged + continued. Now
+    // we treat it explicitly so any future behaviour change (e.g. exposing
+    // retry-after to the user) has a clean place to land.
+    if (res.status === 429) return { status: "pending" };
     const body = await res.text().catch(() => "");
     throw new Error(`Backend returned ${res.status}. ${body.slice(0, 200)}`);
   }
@@ -582,8 +593,16 @@ export async function runSetup(opts: SetupOptions = {}): Promise<void> {
     process.exit(1);
   }
 
-  const sep = start.verification_uri.includes("?") ? "&" : "?";
-  const approveUrl = `${start.verification_uri}${sep}code=${encodeURIComponent(start.user_code)}`;
+  // Prefer the server-supplied complete URL (RFC 8628 §3.2). The fallback
+  // hand-construction is only there for older backends that don't yet emit
+  // `verification_uri_complete`.
+  let approveUrl: string;
+  if (start.verification_uri_complete) {
+    approveUrl = start.verification_uri_complete;
+  } else {
+    const sep = start.verification_uri.includes("?") ? "&" : "?";
+    approveUrl = `${start.verification_uri}${sep}code=${encodeURIComponent(start.user_code)}`;
+  }
 
   log(`Opening ${approveUrl} in your browser...`);
   log(`(If it doesn't open, paste that URL manually.)`);
