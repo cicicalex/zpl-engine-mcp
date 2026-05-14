@@ -362,9 +362,16 @@ export async function patchMcpConfigFile(
     }
   }
 
+  // AUDIT 2026-05-14 (v4.1.8): pin to @latest so users don't get a
+  // globally-cached older version (npx falls back to a previous install
+  // when the spec is unversioned). Without this, every major release we
+  // ship looks like a "MCP disconnected" outage to existing users —
+  // their cached MCP runs the upgrade-required check, exits 1, and Claude
+  // Desktop marks the server dead. With @latest, npx always resolves to
+  // the freshest release on first start after a Claude Desktop restart.
   const entry = {
     command: "npx",
-    args: ["-y", "zpl-engine-mcp"],
+    args: ["-y", "zpl-engine-mcp@latest"],
     env: {
       ZPL_API_KEY: apiKey,
     },
@@ -794,12 +801,14 @@ export async function runWhoami(): Promise<void> {
 }
 
 function printSnippet(apiKey: string): void {
+  // AUDIT 2026-05-14 (v4.1.8): same `@latest` pin as the auto-patch
+  // entry — keeps manual installs aligned with what `setup` writes.
   log("");
   log("  {");
   log('    "mcpServers": {');
   log('      "zpl-engine-mcp": {');
   log('        "command": "npx",');
-  log('        "args": ["-y", "zpl-engine-mcp"],');
+  log('        "args": ["-y", "zpl-engine-mcp@latest"],');
   log('        "env": {');
   log(`          "ZPL_API_KEY": "${apiKey}"`);
   log("        }");

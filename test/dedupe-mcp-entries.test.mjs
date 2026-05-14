@@ -47,6 +47,15 @@ test("removes legacy entry under '@zeropointlogic/engine-mcp' key", async () => 
     assert.equal(after.mcpServers["@zeropointlogic/engine-mcp"], undefined);
     assert.ok(after.mcpServers["zpl-engine-mcp"]);
     assert.equal(after.mcpServers["zpl-engine-mcp"].env.ZPL_API_KEY, KEY);
+    // AUDIT 2026-05-14 (v4.1.8): patched entries MUST pin to @latest so
+    // every Claude Desktop restart picks up the freshest publish (avoids
+    // the "MCP disconnected" symptom when npx falls back to a stale
+    // globally-cached older version).
+    assert.deepEqual(
+      after.mcpServers["zpl-engine-mcp"].args,
+      ["-y", "zpl-engine-mcp@latest"],
+      "setup must write @latest to dodge stale-npx-cache outages"
+    );
     assert.ok(after.mcpServers["other-server"], "non-ZPL sibling must be preserved");
   } finally {
     await rm(dir, { recursive: true, force: true });

@@ -511,7 +511,7 @@ Add to your Claude Desktop config:
   "mcpServers": {
     "ZPL Engine MCP": {
       "command": "npx",
-      "args": ["-y", "zpl-engine-mcp"],
+      "args": ["-y", "zpl-engine-mcp@latest"],
       "env": { "ZPL_API_KEY": "zpl_u_YOUR_KEY" }
     }
   }
