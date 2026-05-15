@@ -52,6 +52,71 @@ const POLL_MAX_INTERVAL_MS = 10_000;    // cap interval_s so a stuck server does
 import { USER_AGENT } from "./user-agent.js";
 
 // ---------------------------------------------------------------------------
+// Force-upgrade self-rexec
+// ---------------------------------------------------------------------------
+
+/**
+ * When the backend returns 426 Upgrade Required (or this binary detects it
+ * is behind the published version), re-exec via `npx -y zpl-engine-mcp@latest`
+ * passing the same subcommand args. The new wizard takes over the terminal,
+ * inherits stdio, and we exit with whatever code it returns.
+ *
+ * Why npx rather than `npm i -g`:
+ *  - No filesystem mutation on the user's machine
+ *  - No sudo required on Linux/macOS
+ *  - Works inside containers without a global node_modules
+ *  - Same command Claude Desktop / Cursor configs already use
+ *
+ * Env override: ZPL_SKIP_AUTOUPGRADE=1 disables self-rexec. Use only for
+ * offline self-hosters; the default behavior is always "promote yourself".
+ */
+async function reexecAsLatest(subcommand: "setup" | "repair" | "whoami"): Promise<never> {
+  if (process.env.ZPL_SKIP_AUTOUPGRADE === "1") {
+    console.error(
+      "[autoupgrade] ZPL_SKIP_AUTOUPGRADE=1 is set — refusing to self-upgrade.",
+    );
+    console.error(
+      `[autoupgrade] Please run manually: npx -y zpl-engine-mcp@latest ${subcommand}`,
+    );
+    process.exit(1);
+  }
+
+  // Forward the meaningful flags from the original invocation. We don't
+  // forward unknown args (defense against argv injection from a hostile
+  // parent shell) — only the ones our wizards know.
+  const flags: string[] = [];
+  if (process.argv.includes("--force")) flags.push("--force");
+  if (process.argv.includes("--yes") || process.argv.includes("-y"))
+    flags.push("--yes");
+
+  const cmd = process.platform === "win32" ? "npx.cmd" : "npx";
+  const args = ["-y", "zpl-engine-mcp@latest", subcommand, ...flags];
+
+  await new Promise<void>((resolve) => {
+    const child = spawn(cmd, args, {
+      stdio: "inherit",
+      shell: process.platform === "win32", // .cmd needs shell on win
+    });
+    child.on("close", (code) => {
+      process.exit(typeof code === "number" ? code : 1);
+      resolve();
+    });
+    child.on("error", (err) => {
+      console.error(
+        `[autoupgrade] Failed to spawn npx: ${(err as Error).message}`,
+      );
+      console.error(
+        `[autoupgrade] Please run manually: npx -y zpl-engine-mcp@latest ${subcommand}`,
+      );
+      process.exit(1);
+      resolve();
+    });
+  });
+  // unreachable
+  process.exit(1);
+}
+
+// ---------------------------------------------------------------------------
 // Backend shape — mirrors /api/auth/cli/start and /api/auth/cli/status
 // ---------------------------------------------------------------------------
 
@@ -220,6 +285,55 @@ async function startDeviceFlow(): Promise<StartResponse> {
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
+    // Server-side force-update gate. If our version is below the
+    // configured minimum, the backend returns 426 with a structured
+    // body containing the exact upgrade command. Re-exec via npx@latest
+    // so the user doesn't have to copy-paste anything.
+    if (res.status === 426) {
+      const body = (await res.json().catch(() => ({}))) as {
+        upgrade_command?: string;
+        minimum_version?: string;
+        current_version?: string;
+        message?: string;
+      };
+      console.error("");
+      console.error(
+        `┌──────────────────────────────────────────────────────────────┐`,
+      );
+      console.error(
+        `│  zpl-engine-mcp v${(body.current_version ?? "").padEnd(8)} — required upgrade               │`,
+      );
+      console.error(
+        `├──────────────────────────────────────────────────────────────┤`,
+      );
+      if (body.message) {
+        console.error(`│ ${body.message.slice(0, 60).padEnd(60)} │`);
+      }
+      console.error(
+        `│  Minimum supported: v${(body.minimum_version ?? "").padEnd(34)}      │`,
+      );
+      console.error(
+        `│                                                              │`,
+      );
+      console.error(
+        `│  Auto-upgrading via:                                         │`,
+      );
+      console.error(
+        `│    ${(body.upgrade_command ?? "npx -y zpl-engine-mcp@latest setup").padEnd(58)} │`,
+      );
+      console.error(
+        `└──────────────────────────────────────────────────────────────┘`,
+      );
+      console.error("");
+
+      // Hand off to the latest version. We never return from this — node
+      // replaces our process with the npx invocation, which downloads and
+      // runs the new wizard with the same args the user originally ran.
+      await reexecAsLatest("setup");
+      // reexecAsLatest never returns. The exit() below is unreachable
+      // safety net in case spawning fails on a hostile OS.
+      process.exit(1);
+    }
     const body = await res.text().catch(() => "");
     throw new Error(`Backend returned ${res.status}. ${body.slice(0, 200)}`);
   }
