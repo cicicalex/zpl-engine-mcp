@@ -6,12 +6,12 @@
     "url": "https://github.com/cicicalex/zpl-engine-mcp",
     "source": "github"
   },
-  "version": "4.1.9",
+  "version": "4.2.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "zpl-engine-mcp",
-      "version": "4.1.9",
+      "version": "4.2.0",
       "transport": {
         "type": "stdio"
       },
