@@ -1,6 +1,6 @@
 /**
  * Advanced tools — 8 wow-factor tools that differentiate ZPL from everything else.
- * Created by Ciciu Alexandru-Costinel — Zero Point Logic
+ * Built by Zero Point Logic
  */
 
 import { z } from "zod";
@@ -283,7 +283,7 @@ or any future event.`,
       }
 
       text += `\n**Total items analyzed:** ${sorted.length}\n`;
-      text += `*Powered by ZPL Engine — Ciciu Alexandru-Costinel, Zero Point Logic*`;
+      text += `*Powered by ZPL Engine — Zero Point Logic*`;
 
       return { content: [{ type: "text" as const, text }] };
     }
@@ -387,7 +387,7 @@ or any future event.`,
 - AIN 45 = "Noticeable imbalance, some elements are disproportionate"
 - AIN 15 = "Extreme bias, one element dominates everything"
 
-AIN is computed by the ZPL Engine — a post-binary mathematical system created by Ciciu Alexandru-Costinel.`,
+AIN is computed by the ZPL Engine — a post-binary mathematical system built by Zero Point Logic.`,
 
         "how-it-works": `## How ZPL Engine Works
 
@@ -424,7 +424,7 @@ The ZPL Engine uses a proprietary mathematical framework that:
 
 This is what makes ZPL unique — it's not machine learning, not statistics, not AI. It's pure mathematics applied to neutrality analysis.
 
-Created by Ciciu Alexandru-Costinel — published on Zenodo with DOI.`,
+Built by Zero Point Logic — published on Zenodo with DOI.`,
 
         "use-cases": `## ZPL Use Cases
 
@@ -528,7 +528,7 @@ Just ask naturally:
 ### 4. Check Your Usage
 Say "check my ZPL usage" → zpl_usage
 
-Created by Ciciu Alexandru-Costinel — Zero Point Logic
+Built by Zero Point Logic
 https://zeropointlogic.io`,
       };
 

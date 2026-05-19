@@ -349,9 +349,9 @@ The ZPL Engine computation method is a trade secret of Zero Point Logic. This MC
 
 MIT (covers the MCP client code only). The ZPL Engine computation algorithm, AIN formula, and server-side processing are proprietary trade secrets of Zero Point Logic and are **NOT** covered by this license.
 
-## Author
+## Publisher
 
-**Ciciu Alexandru-Costinel** — [Zero Point Logic](https://zeropointlogic.io)
+[Zero Point Logic](https://zeropointlogic.io)
 
 ## Links
 

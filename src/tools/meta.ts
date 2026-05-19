@@ -63,7 +63,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
         "**Pricing:** Free plan = 5,000 tokens/month, no credit card. Paid plans from $10/mo.",
         "Sign up: https://zeropointlogic.io/auth/register",
         "",
-        "**Author:** Ciciu Alexandru-Costinel",
+        "**Publisher:** Zero Point Logic",
         "**Paper:** https://doi.org/10.5281/zenodo.19320317",
         "**MCP:** https://github.com/cicicalex/zpl-engine-mcp",
         "**Website:** https://zeropointlogic.io",
@@ -513,7 +513,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
         text += `\nUpgrade: https://zeropointlogic.io/pricing\n`;
       }
 
-      text += `\n---\n*Created by Ciciu Alexandru-Costinel — Zero Point Logic | engine.zeropointlogic.io*\n`;
+      text += `\n---\n*Built by Zero Point Logic | engine.zeropointlogic.io*\n`;
       text += `*Token tracking estimated from local history. Exact usage at zeropointlogic.io/dashboard*`;
 
       return { content: [{ type: "text" as const, text }] };
@@ -594,7 +594,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
         }
       }
 
-      text += `\n---\n*ZPL Engine MCP v${getMcpPackageVersion()} — by Ciciu Alexandru-Costinel, Zero Point Logic*`;
+      text += `\n---\n*ZPL Engine MCP v${getMcpPackageVersion()} — Zero Point Logic*`;
 
       return { content: [{ type: "text" as const, text }] };
     }

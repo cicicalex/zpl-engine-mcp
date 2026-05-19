@@ -113,7 +113,7 @@ function getClient(): ZPLEngineClient {
 const server = new McpServer({
   name: "ZPL Engine MCP",
   version: getMcpPackageVersion(),
-  description: "Mathematical stability engine. 68 tools (64 unique + 4 backwards-compat aliases). AIN is a STABILITY measurement only — never prediction or advice. v4.0 ships 21 bug fixes, memory-aware setup, repair/whoami/diagnose commands, and a much friendlier error UX (Cloudflare detection, smoke-test on first install). Created by Ciciu Alexandru-Costinel.",
+  description: "Mathematical stability engine. 68 tools (64 unique + 4 backwards-compat aliases). AIN is a STABILITY measurement only — never prediction or advice. v4.0 ships 21 bug fixes, memory-aware setup, repair/whoami/diagnose commands, and a much friendlier error UX (Cloudflare detection, smoke-test on first install). Built by Zero Point Logic.",
 });
 
 // Register all domain-specific tools (31 tools across 7 categories)
