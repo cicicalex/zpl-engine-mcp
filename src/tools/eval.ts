@@ -12,6 +12,7 @@ import { distributionBias, clampD, ainSignal, ZPL_DISCLAIMER } from "./helpers.j
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
 import { runPromptNTimes, runConversation, callClaude } from "../eval-client.js";
+import { ainScale, fmtAin } from "../ain-format.js";
 
 /** Session-level cap on Claude API calls to prevent budget drain.
  *  Counter is per-process; restart MCP to reset. */
@@ -144,11 +145,11 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         const inconsistency = 1 - distributionBias([groups.exact, groups.near, groups.different]);
         const d = clampD(runs);
         const result = await client.compute({ d, bias: Math.max(0, Math.min(1, inconsistency)), samples: 1000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
         const totalTokens = responses.reduce((s, r) => s + r.tokens, 0) + result.tokens_used;
 
-        let text = `## Consistency Test — AIN ${ain}/100 (${ainSignal(ain)})\n\n`;
+        let text = `## Consistency Test — AIN ${fmtAin(ain)}/100 (${ainSignal(ain)})\n\n`;
         text += costWarning(runs);
         text += `| Metric | Value |\n|--------|-------|\n`;
         text += `| Runs | ${runs} |\n`;
@@ -207,10 +208,10 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         const bias = distributionBias(dist);
         const d = clampD(Math.max(3, runs));
         const result = await client.compute({ d, bias, samples: 1000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
         const totalTokens = responses.reduce((s, r) => s + r.tokens, 0) + result.tokens_used;
 
-        let text = `## Sycophancy Score — AIN ${ain}/100 (${ainSignal(ain)})\n\n`;
+        let text = `## Sycophancy Score — AIN ${fmtAin(ain)}/100 (${ainSignal(ain)})\n\n`;
         text += costWarning(runs);
         text += `**Claim tested:** "${claim}"\n\n`;
         text += `| Response Type | Count | Share |\n|---------------|-------|-------|\n`;
@@ -264,9 +265,9 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         const bias = distributionBias(dist);
         const d = clampD(Math.max(5, prompts.length));
         const result = await client.compute({ d, bias, samples: 1000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
-        let text = `## Refusal Balance — AIN ${ain}/100 (${ainSignal(ain)})\n\n`;
+        let text = `## Refusal Balance — AIN ${fmtAin(ain)}/100 (${ainSignal(ain)})\n\n`;
         text += costWarning(totalCalls);
         text += `| Metric | Value |\n|--------|-------|\n`;
         text += `| Total prompts | ${prompts.length} |\n`;
@@ -332,10 +333,10 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         const bias = distributionBias(lengths);
         const d = clampD(Math.max(3, languages.length));
         const result = await client.compute({ d, bias, samples: 1000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
         const totalTokens = langResults.reduce((s, r) => s + r.tokens, 0) + result.tokens_used;
 
-        let text = `## Language Equity — AIN ${ain}/100 (${ainSignal(ain)})\n\n`;
+        let text = `## Language Equity — AIN ${fmtAin(ain)}/100 (${ainSignal(ain)})\n\n`;
         text += costWarning(languages.length);
         text += `**Prompt:** "${prompt_en.slice(0, 80)}${prompt_en.length > 80 ? "..." : ""}"\n\n`;
         text += `| Language | Words | Tokens |\n|----------|-------|--------|\n`;
@@ -387,10 +388,10 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         const bias = distributionBias(dist);
         const d = clampD(Math.max(5, messages.length));
         const result = await client.compute({ d, bias, samples: 1000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
         const totalTokens = responses.reduce((s, r) => s + r.tokens, 0) + result.tokens_used;
 
-        let text = `## Persona Drift — AIN ${ain}/100 (${ainSignal(ain)})\n\n`;
+        let text = `## Persona Drift — AIN ${fmtAin(ain)}/100 (${ainSignal(ain)})\n\n`;
         text += costWarning(messages.length);
         text += `**Persona:** "${persona}"\n\n`;
         text += `| Metric | Value |\n|--------|-------|\n`;
@@ -458,9 +459,9 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
 
         const d = clampD(Math.max(5, escalation_prompts.length));
         const result = await client.compute({ d, bias: sharpnessBias, samples: 1000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
-        let text = `## Safety Boundary — AIN ${ain}/100 (${ainSignal(ain)})\n\n`;
+        let text = `## Safety Boundary — AIN ${fmtAin(ain)}/100 (${ainSignal(ain)})\n\n`;
         text += costWarning(escalation_prompts.length);
         text += `| Metric | Value |\n|--------|-------|\n`;
         text += `| Prompts tested | ${escalation_prompts.length} |\n`;
@@ -529,9 +530,9 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         const bias = distributionBias(dist);
         const d = clampD(Math.max(5, questions.length));
         const result = await client.compute({ d, bias, samples: 1000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
-        let text = `## Hallucination Consistency — AIN ${ain}/100 (${ainSignal(ain)})\n\n`;
+        let text = `## Hallucination Consistency — AIN ${fmtAin(ain)}/100 (${ainSignal(ain)})\n\n`;
         text += costWarning(totalCalls);
         text += `| Metric | Value |\n|--------|-------|\n`;
         text += `| Questions tested | ${questions.length} |\n`;
@@ -596,10 +597,10 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         const emotionalBias = Math.min(1, stddev * 2);
         const d = clampD(Math.max(5, conversation.length));
         const result = await client.compute({ d, bias: emotionalBias, samples: 1000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
         const totalTokens = responses.reduce((s, r) => s + r.tokens, 0) + result.tokens_used;
 
-        let text = `## Emotional Stability — AIN ${ain}/100 (${ainSignal(ain)})\n\n`;
+        let text = `## Emotional Stability — AIN ${fmtAin(ain)}/100 (${ainSignal(ain)})\n\n`;
         text += costWarning(conversation.length);
         text += `| Metric | Value |\n|--------|-------|\n`;
         text += `| Messages | ${conversation.length} |\n`;

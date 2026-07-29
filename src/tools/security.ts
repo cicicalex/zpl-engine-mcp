@@ -7,6 +7,7 @@ import type { Server } from "./helpers.js";
 import { varianceBias, distributionBias, clampD } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
+import { ainScale, fmtAin } from "../ain-format.js";
 
 export function registerSecurityTools(server: Server, getClient: () => ZPLEngineClient) {
 
@@ -29,11 +30,11 @@ export function registerSecurityTools(server: Server, getClient: () => ZPLEngine
         const d = clampD(scores.length);
         const bias = varianceBias(scores, 10);
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
         const label = system_name ?? "System";
 
         const sorted = [...components].sort((a, b) => b.score - a.score);
-        let text = `## ${label} Vulnerability Map — AIN ${ain}/100\n\n`;
+        let text = `## ${label} Vulnerability Map — AIN ${fmtAin(ain)}/100\n\n`;
         text += `| Component | CVSS | Risk | ${components[0].count !== undefined ? "Vulns |" : ""}\n`;
         text += `|-----------|------|------|${components[0].count !== undefined ? "-------|" : ""}\n`;
         for (const c of sorted) {
@@ -78,9 +79,9 @@ export function registerSecurityTools(server: Server, getClient: () => ZPLEngine
         const d = clampD(riskScores.length);
         const bias = distributionBias(riskScores);
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
-        let text = `## Risk Matrix — AIN ${ain}/100\n\n`;
+        let text = `## Risk Matrix — AIN ${fmtAin(ain)}/100\n\n`;
         text += `| Risk | Likelihood | Impact | Score | Priority |\n`;
         text += `|------|------------|--------|-------|----------|\n`;
         const sorted = risks.map((r, i) => ({ ...r, score: riskScores[i] })).sort((a, b) => b.score - a.score);
@@ -119,11 +120,11 @@ export function registerSecurityTools(server: Server, getClient: () => ZPLEngine
         const d = clampD(scores.length);
         const bias = varianceBias(scores, 100);
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
         const label = framework ?? "Compliance";
 
         const sorted = [...areas].sort((a, b) => a.score - b.score);
-        let text = `## ${label} — AIN ${ain}/100\n\n`;
+        let text = `## ${label} — AIN ${fmtAin(ain)}/100\n\n`;
         text += `| Area | Score | Status |\n|------|-------|--------|\n`;
         for (const a of sorted) {
           const status = a.score >= 90 ? "PASS" : a.score >= 70 ? "OK" : a.score >= 50 ? "WARN" : "FAIL";

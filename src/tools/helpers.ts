@@ -6,6 +6,7 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ZPLEngineClient, ComputeResponse } from "../engine-client.js";
+import { ainScale, fmtAin } from "../ain-format.js";
 
 export type Server = McpServer;
 
@@ -86,10 +87,10 @@ export const ZPL_DISCLAIMER =
  * Always appends ZPL_DISCLAIMER so downstream AIs do not over-interpret the score.
  */
 export function formatResult(label: string, result: ComputeResponse, extras?: Record<string, string | number>): string {
-  const ain = Math.round(result.ain * 100);
-  let text = `## ${label} — AIN ${ain}/100 (${ainSignal(ain)})\n\n`;
+  const ain = ainScale(result.ain);
+  let text = `## ${label} — AIN ${fmtAin(ain)}/100 (${ainSignal(ain)})\n\n`;
   text += `| Metric | Value |\n|--------|-------|\n`;
-  text += `| AIN Score | ${ain}/100 |\n`;
+  text += `| AIN Score | ${fmtAin(ain)}/100 |\n`;
   text += `| Status | ${result.ain_status} |\n`;
   if (extras) {
     for (const [k, v] of Object.entries(extras)) {

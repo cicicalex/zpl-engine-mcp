@@ -13,7 +13,7 @@
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "inspect": "npx @modelcontextprotocol/inspector node dist/index.js",
-    "test": "npm run build && node --test test/engine-url.test.mjs test/patch-config.test.mjs test/api-key-format.test.mjs test/config-toml.test.mjs test/estimate-tokens.test.mjs test/dedupe-mcp-entries.test.mjs test/cloudflare-error.test.mjs test/setup-memory.test.mjs test/source-regressions.test.mjs test/edge-cases.test.mjs test/sanitize-secrets.test.mjs",
+    "test": "npm run build && node --test test/engine-url.test.mjs test/patch-config.test.mjs test/api-key-format.test.mjs test/config-toml.test.mjs test/estimate-tokens.test.mjs test/dedupe-mcp-entries.test.mjs test/cloudflare-error.test.mjs test/setup-memory.test.mjs test/source-regressions.test.mjs test/edge-cases.test.mjs test/sanitize-secrets.test.mjs test/tool-count.test.mjs test/ain-precision.test.mjs",
     "test:integration": "npm run build && node --test test/integration-smoke.test.mjs",
     "test:all": "npm test && npm run test:integration",
     "verify:cursor": "node dist/index.js --version && node dist/index.js whoami"

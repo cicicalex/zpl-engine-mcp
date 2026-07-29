@@ -7,6 +7,7 @@ import type { Server } from "./helpers.js";
 import { formatResult, directionalBias, distributionBias, concentrationBias, clampD } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
+import { ainScale, fmtAin } from "../ain-format.js";
 
 export function registerFinanceTools(server: Server, getClient: () => ZPLEngineClient) {
 
@@ -29,9 +30,9 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
         const d = clampD(changes.length);
         const bias = directionalBias(changes);
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
-        let text = `## ${label} Scan — Overall AIN: ${ain}/100\n\n`;
+        let text = `## ${label} Scan — Overall AIN: ${fmtAin(ain)}/100\n\n`;
         text += `| Asset | Change | Direction |\n|-------|--------|-----------|\n`;
         for (const a of assets) {
           const dir = a.change > 0.3 ? "BULL" : a.change < -0.3 ? "BEAR" : "NEUTRAL";
@@ -66,9 +67,9 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
         const d = clampD(weights.length);
         const bias = concentrationBias(weights);
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
-        let text = `## Portfolio Balance — AIN ${ain}/100\n\n`;
+        let text = `## Portfolio Balance — AIN ${fmtAin(ain)}/100\n\n`;
         text += `| Asset | Weight | ${allocations[0].return_pct !== undefined ? "Return |" : ""}\n`;
         text += `|-------|--------|${allocations[0].return_pct !== undefined ? "--------|" : ""}\n`;
         for (const a of allocations) {
@@ -122,19 +123,19 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
         const bias = Math.min(1, Math.max(0, Math.sqrt(variance) * 0.4 + Math.abs(mean - 0.5) * 0.6));
 
         const result = await client.compute({ d, bias, samples: 1000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
         const fngLabel = fng_value <= 20 ? "Extreme Fear" : fng_value <= 40 ? "Fear" : fng_value <= 60 ? "Neutral" : fng_value <= 80 ? "Greed" : "Extreme Greed";
 
-        let text = `## Fear & Greed Analysis — AIN ${ain}/100\n\n`;
+        let text = `## Fear & Greed Analysis — AIN ${fmtAin(ain)}/100\n\n`;
         text += `**F&G Index:** ${fng_value} (${fngLabel})\n\n`;
 
         if (ain >= 60 && (fng_value <= 25 || fng_value >= 75)) {
-          text += `**Verdict:** Market sentiment is extreme but ZPL Engine shows stability (AIN ${ain}). Sentiment may be **irrational** — contrarian opportunity.\n`;
+          text += `**Verdict:** Market sentiment is extreme but ZPL Engine shows stability (AIN ${fmtAin(ain)}). Sentiment may be **irrational** — contrarian opportunity.\n`;
         } else if (ain < 40 && fng_value >= 40 && fng_value <= 60) {
-          text += `**Verdict:** Sentiment looks calm but ZPL detects instability (AIN ${ain}). **Hidden risk** — the market is less stable than sentiment suggests.\n`;
+          text += `**Verdict:** Sentiment looks calm but ZPL detects instability (AIN ${fmtAin(ain)}). **Hidden risk** — the market is less stable than sentiment suggests.\n`;
         } else {
-          text += `**Verdict:** Sentiment and mathematical stability are **aligned**. AIN ${ain} confirms the ${fngLabel.toLowerCase()} reading.\n`;
+          text += `**Verdict:** Sentiment and mathematical stability are **aligned**. AIN ${fmtAin(ain)} confirms the ${fngLabel.toLowerCase()} reading.\n`;
         }
 
         text += `\n**Tokens:** ${result.tokens_used} | **Status:** ${result.ain_status}`;
@@ -161,12 +162,12 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
         const d = clampD(changes.length);
         const bias = directionalBias(changes);
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
         const avgChange = changes.reduce((s, v) => s + v, 0) / changes.length;
         const direction = avgChange > 0.1 ? "BULLISH" : avgChange < -0.1 ? "BEARISH" : "RANGING";
 
-        let text = `## ${pair} Stability — AIN ${ain}/100\n\n`;
+        let text = `## ${pair} Stability — AIN ${fmtAin(ain)}/100\n\n`;
         text += `**Direction:** ${direction} (avg change: ${avgChange > 0 ? "+" : ""}${avgChange.toFixed(3)}%)\n`;
         text += `**Stability:** ${result.ain_status}\n`;
         if (spread_pips) text += `**Spread:** ${spread_pips} pips\n`;
@@ -198,10 +199,10 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
         const d = clampD(changes.length);
         const bias = directionalBias(changes);
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
         const sorted = [...sectors].sort((a, b) => b.change - a.change);
-        let text = `## Sector Bias — AIN ${ain}/100\n\n`;
+        let text = `## Sector Bias — AIN ${fmtAin(ain)}/100\n\n`;
         text += `| Sector | Change | Signal |\n|--------|--------|--------|\n`;
         for (const s of sorted) {
           const sig = s.change > 1 ? "STRONG" : s.change > 0 ? "BULL" : s.change > -1 ? "BEAR" : "WEAK";
@@ -245,10 +246,10 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
         const bias = Math.min(1, Math.max(0, avgDev));
 
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
         const label = country ?? "Economy";
 
-        let text = `## ${label} Macro Stability — AIN ${ain}/100\n\n`;
+        let text = `## ${label} Macro Stability — AIN ${fmtAin(ain)}/100\n\n`;
         text += `| Indicator | Value | ${indicators[0].target !== undefined ? "Target | Gap |" : ""}\n`;
         text += `|-----------|-------|${indicators[0].target !== undefined ? "--------|-----|" : ""}\n`;
         for (const ind of indicators) {
@@ -299,9 +300,9 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
 
         const d = clampD(assets.length * 3);
         const result = await client.compute({ d, bias: correlationBias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
-        let text = `## Correlation Analysis — AIN ${ain}/100\n\n`;
+        let text = `## Correlation Analysis — AIN ${fmtAin(ain)}/100\n\n`;
         text += `**Assets:** ${assets.map((a) => a.name).join(", ")}\n`;
         text += `**Data points:** ${len} per asset\n\n`;
 

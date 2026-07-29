@@ -11,6 +11,8 @@ import { loadPlan } from "../config.js";
 import { getValidatedEngineBaseUrl } from "../engine-url.js";
 import { getMcpPackageJsonPath, getMcpPackageVersion } from "../package-meta.js";
 import { getHistory, addHistory, estimateOpTokens } from "../store.js";
+import { ainScale, fmtAin, ainPct } from "../ain-format.js";
+import { REGISTERED_TOOL_COUNT, UNIQUE_TOOL_COUNT, ALIAS_TOOL_COUNT } from "../tool-count.js";
 
 /** Plan details — MUST match constants.ts on ZPL Main website */
 const PLAN_INFO: Record<string, { price: string; annualPrice: string; maxD: number; tokens: string; rate: string; keys: number }> = {
@@ -48,7 +50,8 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
         "# Zero Point Logic (ZPL)",
         "",
         "**What:** A deterministic equilibrium detection engine. Computes an AIN (AI Neutrality Index)",
-        "score in the range 0.1–99.9 that measures the mathematical stability of any input distribution.",
+        "score that measures the mathematical stability of any input distribution. The engine returns AIN",
+        "on a 0.0–1.0 scale with 6 decimals; this MCP displays it on a 0–100 scale with decimals kept.",
         "",
         "**What it is NOT:**",
         "- Not a prediction engine — does not forecast prices, outcomes, or futures.",
@@ -58,7 +61,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
         "**Use cases:** finance (portfolio bias), gaming (loot/RNG fairness), AI/ML (model bias),",
         "security (vulnerability balance), crypto (tokenomics, whale concentration).",
         "",
-        "**Total tools:** 64 unique (+ 4 backwards-compat aliases = 68 registered) across 11 categories.",
+        `**Total tools:** ${UNIQUE_TOOL_COUNT} unique (+ ${ALIAS_TOOL_COUNT} backwards-compat aliases = ${REGISTERED_TOOL_COUNT} registered) across 11 categories.`,
         "",
         "**Pricing:** Free plan = 5,000 tokens/month, no credit card. Paid plans from $10/mo.",
         "Sign up: https://zeropointlogic.io/auth/register",
@@ -79,7 +82,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
   // --- zpl_quota: show user's remaining tokens this month ---
   server.tool(
     "zpl_quota",
-    "Show your remaining ZPL tokens for the current month. Reads from local MCP history (call counts) and the configured plan. Useful for budgeting before running expensive operations.",
+    "LOCAL ESTIMATE ONLY — not your real server-side quota. Estimates remaining ZPL tokens for the current month from this MCP's local call history and the plan declared in your env/config. It does not query the engine, so it cannot see usage from other machines, other keys, the website, the CLI, or the SDK. For the authoritative figure use your dashboard.",
     {},
     async () => {
       const apiKey = resolveZplApiKey();
@@ -108,19 +111,27 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
       const pct = Math.round((monthTokens / monthlyLimit) * 100);
 
       const text = [
-        `# ZPL Token Quota — ${plan.toUpperCase()} plan`,
+        `# ZPL Token Quota — LOCAL ESTIMATE (not your real quota)`,
         ``,
-        `| Metric | Value |`,
+        `> **⚠️ These numbers do not come from the server.** This tool never asks the`,
+        `> engine how many tokens you have left. Every figure below is computed from`,
+        `> this MCP's own local history file, against a plan name you declared yourself`,
+        `> (env var / config.toml — assumed "${plan}" here, unverified). Usage from any`,
+        `> other machine, key, browser session, CLI or SDK call is invisible to it, and`,
+        `> a wrong plan name silently produces a wrong limit.`,
+        `>`,
+        `> **Authoritative quota lives on the engine.** For the real figure, open your`,
+        `> dashboard: https://zeropointlogic.io/dashboard`,
+        ``,
+        `| Metric | Value (local estimate) |`,
         `|---|---|`,
-        `| Plan | ${info.price} (${plan}) |`,
-        `| Monthly limit | ${info.tokens} tokens |`,
-        `| Used (local estimate) | ~${monthTokens} tokens (${pct}%) |`,
-        `| Remaining (local estimate) | ~${remaining} tokens |`,
-        `| Operations this month | ${monthOps} |`,
-        `| Max dimension | ${info.maxD} |`,
-        `| Max API keys | ${info.keys} |`,
-        ``,
-        `> Estimates are based on local MCP history. Authoritative quota lives on the engine — visit your dashboard for exact figures: https://zeropointlogic.io/dashboard`,
+        `| Plan (as declared locally, unverified) | ${info.price} (${plan}) |`,
+        `| Monthly limit for that plan | ${info.tokens} tokens |`,
+        `| Used — estimate from local history | ~${monthTokens} tokens (~${pct}%) |`,
+        `| Remaining — estimate, may be far off | ~${remaining} tokens |`,
+        `| Operations recorded locally this month | ${monthOps} |`,
+        `| Max dimension for that plan | ${info.maxD} |`,
+        `| Max API keys for that plan | ${info.keys} |`,
       ].join("\n");
       return { content: [{ type: "text" as const, text }] };
     }
@@ -129,7 +140,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
   // --- zpl_score_only: minimal output for pipeline integration ---
   server.tool(
     "zpl_score_only",
-    "Run a raw computation and return ONLY the AIN score and status — no markdown, no tables, no interpretation. Designed for CI/CD pipelines, scripts, and programmatic consumers that need a clean numeric output.",
+    "Run a raw computation and return ONLY the numbers as JSON — no markdown, no tables, no interpretation. Fields: `ain` (engine value on the 0.0-1.0 scale, unrounded), `ain_status` (equilibrium quality: CERTIFIED_NEUTRAL / HIGHLY_NEUTRAL / NEUTRAL / MODERATE_BIAS / SIGNIFICANT_BIAS / HIGH_BIAS), `status` (stability regime: STABLE / ACTIVE / INHIBITED_HIGH / INHIBITED_LOW — a different field, do not confuse the two), `tokens`. Designed for CI/CD pipelines, scripts, and programmatic consumers.",
     {
       d: z.number().int().min(3).max(100).describe("Matrix dimension (3-100)"),
       bias: z.number().min(0).max(1).describe("Input bias (0.0-1.0)"),
@@ -139,10 +150,19 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
       try {
         const client = getClient();
         const result = await client.compute({ d, bias, samples: samples ?? 1000 });
-        const ain = Math.round(result.ain * 100) / 100;
+        // Machine-readable output: pass the engine's AIN through untouched
+        // (0.0–1.0, 6 decimals). Rounding here silently destroyed 4 of them.
+        //
+        // `ain_status` (equilibrium quality: CERTIFIED_NEUTRAL … HIGH_BIAS) and
+        // `status` (stability regime: STABLE / ACTIVE / INHIBITED_HIGH /
+        // INHIBITED_LOW) are two different engine fields. This tool used to emit
+        // ain_status under the key `status`, which conflated them; both are now
+        // emitted under their real names. `status` is kept for compatibility but
+        // now carries the engine's own `status` value.
         const text = JSON.stringify({
-          ain,
-          status: result.ain_status,
+          ain: result.ain,
+          ain_status: result.ain_status,
+          status: result.status,
           tokens: result.tokens_used,
         });
         return { content: [{ type: "text" as const, text }] };
@@ -240,7 +260,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
           const client = getClient();
           const r = await client.compute({ d: 3, bias: 0.5, samples: 100 });
           if (typeof r.ain === "number") {
-            lines.push(`- ✅ Compute OK. Engine accepted the key. (sample AIN ${Math.round(r.ain * 100)}/100, ${r.tokens_used} tokens)`);
+            lines.push(`- ✅ Compute OK. Engine accepted the key. (sample AIN ${ainPct(r.ain)}/100, ${r.tokens_used} tokens)`);
           } else {
             lines.push(`- ⚠️ Compute returned malformed response.`);
           }
@@ -361,10 +381,10 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
               bias: job.bias,
               samples: job.samples ?? 1000,
             });
-            const ain = Math.round(result.ain * 100);
+            const ain = ainScale(result.ain);
             totalTokens += result.tokens_used;
             scores[job.label] = ain;
-            text += `| ${i + 1} | ${job.label} | ${job.d} | ${job.bias.toFixed(2)} | ${ain}/100 | ${result.ain_status} | ${result.tokens_used} |\n`;
+            text += `| ${i + 1} | ${job.label} | ${job.d} | ${job.bias.toFixed(2)} | ${fmtAin(ain)}/100 | ${result.ain_status} | ${result.tokens_used} |\n`;
           } catch (err) {
             text += `| ${i + 1} | ${job.label} | ${job.d} | ${job.bias.toFixed(2)} | ERROR | ${(err as Error).message.slice(0, 30)} | 0 |\n`;
           }
@@ -416,9 +436,9 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
   // --- zpl_usage: full account + usage dashboard ---
   server.tool(
     "zpl_usage",
-    "Full account dashboard — shows your current plan, token usage this month, remaining budget, rate limits, max dimension allowed, monthly reset date, and what operations you can still do. Warns if tokens are running low.",
+    "Account dashboard built from LOCAL DATA ONLY — usage is estimated from this MCP's own history and the plan is whatever you pass in, not what the server has on file. Shows plan limits, estimated token usage this month, estimated remaining budget, rate limits, max dimension, reset date, and what operations the estimate allows. Warns if the estimate is running low. Real usage and quota live on the engine: zeropointlogic.io/dashboard.",
     {
-      plan: z.enum(["free", "basic", "pro", "gamepro", "studio", "agent", "enterprise", "enterprise_xl"]).optional().default("free").describe("Your current plan (check zeropointlogic.io/dashboard)"),
+      plan: z.enum(["free", "basic", "pro", "gamepro", "studio", "agent", "enterprise", "enterprise_xl"]).optional().default("free").describe("Plan to compute limits against. NOT verified against the server — whatever you pass here is taken at face value, and a wrong value produces wrong limits. Check your real plan at zeropointlogic.io/dashboard."),
     },
     async ({ plan }) => {
       const history = getHistory(500);
@@ -447,10 +467,14 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
       const budgetWarn = Number(process.env.ZPL_BUDGET_WARN) || 500;
       const isLow = remaining <= budgetWarn;
 
-      let text = `## ZPL Account Dashboard\n\n`;
+      let text = `## ZPL Account Dashboard — LOCAL ESTIMATE\n\n`;
+      text += `> **⚠️ Not server data.** The plan below is the one you passed in (unverified),\n`;
+      text += `> and usage is estimated from this MCP's local history only — calls made from\n`;
+      text += `> another machine, key, the website, the CLI or the SDK are not counted.\n`;
+      text += `> Authoritative usage and quota live on the engine: https://zeropointlogic.io/dashboard\n\n`;
 
       // Plan info
-      text += `### Your Plan: **${plan.toUpperCase()}** (${info.price})\n\n`;
+      text += `### Plan used for this estimate: **${plan.toUpperCase()}** (${info.price}) — as supplied, not verified\n\n`;
       text += `| Setting | Value |\n|---------|-------|\n`;
       text += `| Plan | ${plan} (${info.price}) |\n`;
       text += `| Annual Price | ${info.annualPrice} (save 20%) |\n`;
@@ -460,17 +484,17 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
       text += `| Monthly Tokens | ${info.tokens} |\n`;
 
       // Usage
-      text += `\n### This Month\n\n`;
+      text += `\n### This Month (local estimate — server may differ)\n\n`;
       text += `| Metric | Value |\n|--------|-------|\n`;
-      text += `| Operations | ${monthOps} |\n`;
-      text += `| Tokens Used (est.) | ~${monthTokens.toLocaleString()} |\n`;
-      text += `| Tokens Remaining | ~${remaining.toLocaleString()} |\n`;
+      text += `| Operations recorded locally | ${monthOps} |\n`;
+      text += `| Tokens Used (local est.) | ~${monthTokens.toLocaleString()} |\n`;
+      text += `| Tokens Remaining (local est.) | ~${remaining.toLocaleString()} |\n`;
       text += `| Days Until Reset | ${daysLeft} (resets ${monthEnd.toLocaleDateString()}) |\n`;
       text += `| All-time Operations | ${allTimeOps} |\n`;
 
       // Warning
       if (isLow) {
-        text += `\n**WARNING: Low token budget!** Only ~${remaining.toLocaleString()} tokens remaining.\n`;
+        text += `\n**WARNING: Low token budget (by local estimate)!** Only ~${remaining.toLocaleString()} tokens remaining according to local history — confirm on the dashboard before acting on it.\n`;
         text += `**Options:**\n`;
         text += `- Upgrade plan: https://zeropointlogic.io/pricing\n`;
         text += `- Buy token pack (one-time, never expire): https://zeropointlogic.io/dashboard/billing\n`;
@@ -575,7 +599,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
         const client = new (await import("../engine-client.js")).ZPLEngineClient(apiKey, engineUrl);
         const result = await client.compute({ d: 3, bias: 0.5, samples: 100 });
         text += `| Key Valid | **YES** |\n`;
-        text += `| Test AIN | ${Math.round(result.ain * 100)}/100 |\n`;
+        text += `| Test AIN | ${ainPct(result.ain)}/100 |\n`;
         text += `\n**Everything works!** Your API key is valid and the engine is responding.\n`;
       } catch (err) {
         const msg = (err as Error).message;

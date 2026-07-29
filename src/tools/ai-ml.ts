@@ -7,6 +7,7 @@ import type { Server } from "./helpers.js";
 import { distributionBias, concentrationBias, clampD } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
+import { ainScale, fmtAin } from "../ain-format.js";
 
 export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClient) {
 
@@ -30,11 +31,11 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
         const d = clampD(counts.length);
         const bias = distributionBias(counts);
         const result = await client.compute({ d, bias, samples: 3000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
         const total = counts.reduce((s, v) => s + v, 0);
         const label = model_name ?? "Model";
 
-        let text = `## ${label} Bias — AIN ${ain}/100\n\n`;
+        let text = `## ${label} Bias — AIN ${fmtAin(ain)}/100\n\n`;
         text += `| Class | Predictions | Share | ${predictions[0].avg_confidence !== undefined ? "Confidence |" : ""}\n`;
         text += `|-------|-------------|-------|${predictions[0].avg_confidence !== undefined ? "------------|" : ""}\n`;
         for (const p of predictions) {
@@ -76,12 +77,12 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
         const d = clampD(counts.length);
         const bias = concentrationBias(counts);
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
         const total = counts.reduce((s, v) => s + v, 0);
         const label = dataset_name ?? "Dataset";
 
         const sorted = [...classes].sort((a, b) => b.samples - a.samples);
-        let text = `## ${label} Balance — AIN ${ain}/100\n\n`;
+        let text = `## ${label} Balance — AIN ${fmtAin(ain)}/100\n\n`;
         text += `**Total samples:** ${total.toLocaleString()} | **Classes:** ${classes.length}\n\n`;
         text += `| Class | Samples | Share |\n|-------|---------|-------|\n`;
         for (const c of sorted) {
@@ -123,9 +124,9 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
         const d = clampD(counts.length);
         const bias = distributionBias(counts);
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
-        let text = `## Prompt Consistency — AIN ${ain}/100\n\n`;
+        let text = `## Prompt Consistency — AIN ${fmtAin(ain)}/100\n\n`;
         if (prompt_description) text += `**Prompt:** ${prompt_description}\n`;
         text += `**Total runs:** ${total_runs}\n\n`;
         text += `| Response | Count | Rate |\n|----------|-------|------|\n`;
@@ -169,18 +170,18 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
           const variance = norm.reduce((s, v) => s + (v - mean) ** 2, 0) / norm.length;
           const bias = Math.min(1, Math.sqrt(variance) / (mean || 1));
           const r = await client.compute({ d, bias, samples: 1000 });
-          results.push({ name: model.name, ain: Math.round(r.ain * 100), tokens: r.tokens_used });
+          results.push({ name: model.name, ain: ainScale(r.ain), tokens: r.tokens_used });
         }
 
         results.sort((a, b) => b.ain - a.ain);
         let text = `## Model Benchmark — Neutrality Ranking\n\n`;
         text += `| Rank | Model | AIN |\n|------|-------|-----|\n`;
         for (let i = 0; i < results.length; i++) {
-          text += `| ${i + 1} | ${results[i].name} | ${results[i].ain}/100 |\n`;
+          text += `| ${i + 1} | ${results[i].name} | ${fmtAin(results[i].ain)}/100 |\n`;
         }
 
         text += `\n**Metrics:** ${metrics.join(", ")}\n`;
-        text += `**Most balanced:** ${results[0].name} (AIN ${results[0].ain})\n`;
+        text += `**Most balanced:** ${results[0].name} (AIN ${fmtAin(results[0].ain)})\n`;
         text += `**Total tokens:** ${results.reduce((s, r) => s + r.tokens, 0)}`;
 
         const scores: Record<string, number> = {};

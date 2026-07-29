@@ -27,6 +27,8 @@ import { registerAllTools } from "./tools/index.js";
 import { loadApiKey } from "./config.js";
 import { getValidatedEngineBaseUrl } from "./engine-url.js";
 import { getMcpPackageVersion } from "./package-meta.js";
+import { ainScale, fmtAin, ainPct } from "./ain-format.js";
+import { TOOL_COUNT_PHRASE } from "./tool-count.js";
 // API key format validation extracted to api-key-format.ts for unit testing.
 // v3.7.2: Accepts wizard-issued keys with type prefixes (zpl_u_mcp_, zpl_u_cli_,
 // zpl_u_default_). See src/api-key-format.ts for full spec + regex rationale.
@@ -113,10 +115,10 @@ function getClient(): ZPLEngineClient {
 const server = new McpServer({
   name: "ZPL Engine MCP",
   version: getMcpPackageVersion(),
-  description: "Mathematical stability engine. 68 tools (64 unique + 4 backwards-compat aliases). AIN is a STABILITY measurement only — never prediction or advice. v4.0 ships 21 bug fixes, memory-aware setup, repair/whoami/diagnose commands, and a much friendlier error UX (Cloudflare detection, smoke-test on first install). Built by Zero Point Logic.",
+  description: `Mathematical stability engine. ${TOOL_COUNT_PHRASE}. AIN is a STABILITY measurement only — never prediction or advice. v4.0 ships 21 bug fixes, memory-aware setup, repair/whoami/diagnose commands, and a much friendlier error UX (Cloudflare detection, smoke-test on first install). Built by Zero Point Logic.`,
 });
 
-// Register all domain-specific tools (31 tools across 7 categories)
+// Register every tool (see src/tool-count.ts for the single declared count)
 registerAllTools(server, getClient);
 
 // ---------------------------------------------------------------------------
@@ -136,14 +138,14 @@ server.tool(
       const client = getClient();
       const result = await client.compute({ d, bias, samples });
 
-      const ain = Math.round(result.ain * 100);
+      const ain = ainScale(result.ain);
       // IP protection: expose AIN score + status only. No p_output, no deviation,
       // no intermediate values. Tokens shown separately so user knows usage.
       const text = [
         `## ZPL Engine Result`,
         ``,
-        `**AIN Score:** ${ain}/100`,
-        `**Status:** ${result.ain_status}`,
+        `**AIN Score:** ${fmtAin(ain)}/100`,
+        `**AIN Status:** ${result.ain_status}`,
         ``,
         `*Tokens used: ${result.tokens_used}*`,
       ].join("\n");
@@ -173,11 +175,11 @@ server.tool(
 
       // IP protection: expose AIN score + status only per step. No p_output, no deviation.
       let text = `## ZPL Sweep (d=${result.d})\n\n`;
-      text += `| Bias | AIN | Status |\n`;
+      text += `| Bias | AIN | Stability |\n`;
       text += `|------|-----|--------|\n`;
 
       for (const r of result.results) {
-        text += `| ${r.bias.toFixed(2)} | ${Math.round(r.ain * 100)}% | ${r.status} |\n`;
+        text += `| ${r.bias.toFixed(2)} | ${ainPct(r.ain)}% | ${r.status} |\n`;
       }
 
       text += `\n*Total tokens used: ${result.total_tokens}*`;
@@ -378,7 +380,7 @@ server.tool(
       const time = new Date(h.timestamp).toLocaleString();
       const label = h.question ?? h.domain ?? "-";
       const scores = Object.entries(h.ain_scores)
-        .map(([k, v]) => `${k}: ${v}`)
+        .map(([k, v]) => `${k}: ${typeof v === "number" ? fmtAin(v) : v}`)
         .join(", ");
       text += `| ${i + 1} | ${time} | ${h.tool} | ${label.slice(0, 40)} | ${scores} |\n`;
     }
@@ -415,7 +417,7 @@ server.tool(
         text += `|----|------|--------|----------|------------|-------|\n`;
 
         for (const item of items) {
-          const lastAin = item.last_ain !== undefined ? `${item.last_ain}/100` : "—";
+          const lastAin = item.last_ain !== undefined ? `${fmtAin(item.last_ain)}/100` : "—";
           const lastCheck = item.last_check ? new Date(item.last_check).toLocaleDateString() : "never";
           text += `| \`${item.id.slice(0, 12)}\` | ${item.name} | ${item.domain} | ${lastAin} | ${lastCheck} | ${item.notes ?? ""} |\n`;
         }
@@ -457,13 +459,13 @@ server.tool(
             }
             const params = lens.buildParams(item.input);
             const result = await client.compute(params);
-            const ain = Math.round(result.ain * 100);
+            const ain = ainScale(result.ain);
             const prev = item.last_ain;
             const delta = prev !== undefined ? ain - prev : null;
-            const deltaStr = delta !== null ? (delta > 0 ? ` (+${delta})` : delta < 0 ? ` (${delta})` : ` (=)`) : " (first check)";
+            const deltaStr = delta !== null ? (delta > 0 ? ` (+${fmtAin(delta)})` : delta < 0 ? ` (${fmtAin(delta)})` : ` (=)`) : " (first check)";
 
             updateWatchlistItem(item.id, ain);
-            text += `- **${item.name}**: AIN ${ain}/100${deltaStr} — ${result.ain_status}\n`;
+            text += `- **${item.name}**: AIN ${fmtAin(ain)}/100${deltaStr} — ${result.ain_status}\n`;
           } catch (err) {
             text += `- **${item.name}**: Error — ${(err as Error).message}\n`;
           }
@@ -510,7 +512,7 @@ server.tool(
       text += `## 1. Primary Analysis\n\n`;
       const mainResult = await client.compute(params);
       const interpretation = lens.interpret(mainResult, input);
-      text += `**AIN Score:** ${interpretation.ain}/100\n`;
+      text += `**AIN Score:** ${fmtAin(interpretation.ain)}/100\n`;
       text += `**Status:** ${interpretation.status}\n`;
       text += `**Signal:** ${interpretation.signal}\n\n`;
       text += Object.entries(interpretation.details).map(([k, v]) => `- **${k}:** ${v}`).join("\n");
@@ -538,7 +540,7 @@ server.tool(
           if (testD > params.d + 10) continue; // skip unreasonably large
           try {
             const r = await client.compute({ d: testD, bias: params.bias, samples: params.samples });
-            text += `| d=${testD} | ${Math.round(r.ain * 100)}% | ${r.ain_status} | ${r.tokens_used} |\n`;
+            text += `| d=${testD} | ${ainPct(r.ain)}% | ${r.ain_status} | ${r.tokens_used} |\n`;
             totalTokens += r.tokens_used;
           } catch {
             text += `| d=${testD} | — | Error | 0 |\n`;

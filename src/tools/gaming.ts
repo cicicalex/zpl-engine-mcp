@@ -7,6 +7,7 @@ import type { Server } from "./helpers.js";
 import { distributionBias, concentrationBias, clampD, ZPL_DISCLAIMER } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
+import { ainScale, fmtAin } from "../ain-format.js";
 
 export function registerGamingTools(server: Server, getClient: () => ZPLEngineClient) {
 
@@ -30,10 +31,10 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
         const rawBias = distributionBias(rates);
         const bias = expected_uniform ? rawBias : rawBias * 0.7; // intentional skew is OK
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
         const label = game ?? "Loot Table";
 
-        let text = `## ${label} Fairness — AIN ${ain}/100\n\n`;
+        let text = `## ${label} Fairness — AIN ${fmtAin(ain)}/100\n\n`;
         text += `| Item | Drop Rate | Share |\n|------|-----------|-------|\n`;
         const total = rates.reduce((s, v) => s + v, 0);
         for (const item of items) {
@@ -80,9 +81,9 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
         const bias = Math.min(1, Math.max(0, teamDiff * 0.6 + spread * 0.4));
 
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
-        let text = `## Matchmaking ${game ?? ""} — AIN ${ain}/100\n\n`;
+        let text = `## Matchmaking ${game ?? ""} — AIN ${fmtAin(ain)}/100\n\n`;
         text += `| Metric | Team A | Team B |\n|--------|--------|--------|\n`;
         text += `| Players | ${team_a.length} | ${team_b.length} |\n`;
         text += `| Avg Rating | ${avgA.toFixed(0)} | ${avgB.toFixed(0)} |\n`;
@@ -131,9 +132,9 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
         const bias = Math.min(1, Math.max(0, avgDev / 2));
 
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
-        let text = `## ${game ?? "Game"} Economy — AIN ${ain}/100\n\n`;
+        let text = `## ${game ?? "Game"} Economy — AIN ${fmtAin(ain)}/100\n\n`;
         text += `| Resource | Production | Consumption | Ratio | Health |\n`;
         text += `|----------|------------|-------------|-------|--------|\n`;
         for (let i = 0; i < resources.length; i++) {
@@ -177,10 +178,10 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
         const d = clampD(values.length);
         const bias = distributionBias(values);
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
         const sorted = entities.map((e, i) => ({ ...e, value: values[i] })).sort((a, b) => b.value - a.value);
-        let text = `## ${game ?? "PvP"} Balance — AIN ${ain}/100\n\n`;
+        let text = `## ${game ?? "PvP"} Balance — AIN ${fmtAin(ain)}/100\n\n`;
         text += `| Rank | Name | Score | Status |\n|------|------|-------|--------|\n`;
         const avg = values.reduce((s, v) => s + v, 0) / values.length;
         for (let i = 0; i < sorted.length; i++) {
@@ -222,9 +223,9 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
         const d = clampD(rates.length + 2);
         const bias = distributionBias(rates);
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
-        let text = `## Gacha Audit — AIN ${ain}/100\n\n`;
+        let text = `## Gacha Audit — AIN ${fmtAin(ain)}/100\n\n`;
         text += `| Tier | Rate | Expected pulls |\n|------|------|----------------|\n`;
         for (const t of tiers) {
           const expected = t.rate > 0 ? Math.ceil(100 / t.rate) : "∞";
@@ -275,10 +276,10 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
         const d = clampD(possible_values);
         const bias = distributionBias(counts);
         const result = await client.compute({ d, bias, samples: 3000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
         const expected = outcomes.length / possible_values;
-        let text = `## RNG Fairness Test — AIN ${ain}/100\n\n`;
+        let text = `## RNG Fairness Test — AIN ${fmtAin(ain)}/100\n\n`;
 
         if (insufficientSamples) {
           text += `> ⚠️  **Insufficient sample size for reliable test.** ` +

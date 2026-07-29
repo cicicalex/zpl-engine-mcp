@@ -8,6 +8,7 @@
 
 import type { ComputeResponse, SweepResponse } from "../engine-client.js";
 import type { DomainLens, DomainInterpretation } from "./types.js";
+import { ainScale, fmtAin, ainPct } from "../ain-format.js";
 
 export const financeLens: DomainLens = {
   id: "finance",
@@ -67,7 +68,7 @@ export const financeLens: DomainLens = {
   },
 
   interpret(result: ComputeResponse, input: Record<string, unknown>): DomainInterpretation {
-    const ain = Math.round(result.ain * 100);
+    const ain = ainScale(result.ain);
     const context = (input.context as string) ?? "market";
 
     let signal: string;
@@ -91,12 +92,12 @@ export const financeLens: DomainLens = {
     }
 
     return {
-      summary: `${context} AIN: ${ain}/100 — ${result.ain_status}`,
+      summary: `${context} AIN: ${fmtAin(ain)}/100 — ${result.ain_status}`,
       ain,
       status: result.ain_status,
       signal,
       details: {
-        "AIN Score": ain,
+        "AIN Score": `${fmtAin(ain)}/100`,
         "Status": result.ain_status,
         "Tokens Used": result.tokens_used,
       },
@@ -110,17 +111,16 @@ export const financeLens: DomainLens = {
     const unstable = result.results.filter((r) => r.ain < 0.3);
 
     let summary = `## ${context} Stability Sweep\n\n`;
-    summary += `| Bias | AIN | Status |\n|------|-----|--------|\n`;
+    summary += `| Bias | AIN | Stability |\n|------|-----|--------|\n`;
 
     for (const r of result.results) {
-      const ainPct = Math.round(r.ain * 100);
-      summary += `| ${r.bias.toFixed(2)} | ${ainPct}% | ${r.status} |\n`;
+      summary += `| ${r.bias.toFixed(2)} | ${ainPct(r.ain)}% | ${r.status} |\n`;
     }
 
     summary += `\n*Tokens used: ${result.total_tokens}*\n`;
 
     if (neutral) {
-      summary += `\nNeutral point identified (AIN ${Math.round(neutral.ain * 100)}%).`;
+      summary += `\nNeutral point identified (AIN ${ainPct(neutral.ain)}%).`;
     }
     if (unstable.length > 0) {
       summary += `\n${unstable.length} of 19 bias steps show instability (AIN < 30%).`;

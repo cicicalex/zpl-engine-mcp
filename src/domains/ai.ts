@@ -8,6 +8,7 @@
 
 import type { ComputeResponse, SweepResponse } from "../engine-client.js";
 import type { DomainLens, DomainInterpretation } from "./types.js";
+import { ainScale, fmtAin, ainPct } from "../ain-format.js";
 
 export const aiLens: DomainLens = {
   id: "ai",
@@ -64,7 +65,7 @@ export const aiLens: DomainLens = {
   },
 
   interpret(result: ComputeResponse, input: Record<string, unknown>): DomainInterpretation {
-    const ain = Math.round(result.ain * 100);
+    const ain = ainScale(result.ain);
     const modelType = (input.model_type as string) ?? "model";
 
     let signal: string;
@@ -88,12 +89,12 @@ export const aiLens: DomainLens = {
     }
 
     return {
-      summary: `${modelType} Fairness: AIN ${ain}/100 — ${signal}`,
+      summary: `${modelType} Fairness: AIN ${fmtAin(ain)}/100 — ${signal}`,
       ain,
       status: result.ain_status,
       signal,
       details: {
-        "AIN Score": ain,
+        "AIN Score": `${fmtAin(ain)}/100`,
         "Fairness Status": result.ain_status,
         "Tokens Used": result.tokens_used,
       },
@@ -105,10 +106,10 @@ export const aiLens: DomainLens = {
     const modelType = (input.model_type as string) ?? "model";
     let summary = `## ${modelType} Fairness Sweep (d=${result.d})\n\n`;
     summary += `How the ${modelType} would score across bias levels:\n\n`;
-    summary += `| Bias | AIN | Status |\n|------|-----|--------|\n`;
+    summary += `| Bias | AIN | Stability |\n|------|-----|--------|\n`;
 
     for (const r of result.results) {
-      summary += `| ${r.bias.toFixed(2)} | ${Math.round(r.ain * 100)}% | ${r.status} |\n`;
+      summary += `| ${r.bias.toFixed(2)} | ${ainPct(r.ain)}% | ${r.status} |\n`;
     }
 
     summary += `\n*Tokens used: ${result.total_tokens}*`;

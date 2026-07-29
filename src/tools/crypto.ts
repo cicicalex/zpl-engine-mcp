@@ -7,6 +7,7 @@ import type { Server } from "./helpers.js";
 import { concentrationBias, distributionBias, varianceBias, clampD } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
+import { ainScale, fmtAin } from "../ain-format.js";
 
 export function registerCryptoTools(server: Server, getClient: () => ZPLEngineClient) {
 
@@ -29,11 +30,11 @@ export function registerCryptoTools(server: Server, getClient: () => ZPLEngineCl
         const d = clampD(pcts.length);
         const bias = concentrationBias(pcts);
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
         const label = token ?? "Token";
 
         const topTotal = pcts.reduce((s, v) => s + v, 0);
-        let text = `## ${label} Whale Check — AIN ${ain}/100\n\n`;
+        let text = `## ${label} Whale Check — AIN ${fmtAin(ain)}/100\n\n`;
         text += `**Top ${holders.length} holders control ${topTotal.toFixed(1)}% of supply**\n`;
         if (total_holders) text += `**Total holders:** ${total_holders.toLocaleString()}\n`;
         text += `\n| Holder | Share |\n|--------|-------|\n`;
@@ -73,9 +74,9 @@ export function registerCryptoTools(server: Server, getClient: () => ZPLEngineCl
         const d = clampD(scores.length);
         const bias = varianceBias(scores, 10);
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
-        let text = `## ${protocol} DeFi Risk — AIN ${ain}/100\n\n`;
+        let text = `## ${protocol} DeFi Risk — AIN ${fmtAin(ain)}/100\n\n`;
         if (tvl) text += `**TVL:** $${(tvl / 1e9).toFixed(2)}B\n\n`;
         text += `| Risk Factor | Score | Level |\n|-------------|-------|-------|\n`;
         const sorted = [...factors].sort((a, b) => b.score - a.score);
@@ -120,7 +121,7 @@ export function registerCryptoTools(server: Server, getClient: () => ZPLEngineCl
         const bias = Math.min(1, Math.max(0, avgDev));
 
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
         // v3.7.2: align table & verdict — categorize pools first so the verdict
         // can cite the actual table contents (e.g. "2 of 5 IMBALANCED") instead
@@ -138,7 +139,7 @@ export function registerCryptoTools(server: Server, getClient: () => ZPLEngineCl
           imbalanced: rows.filter((r) => r.balance === "IMBALANCED").length,
         };
 
-        let text = `## Liquidity Analysis — AIN ${ain}/100\n\n`;
+        let text = `## Liquidity Analysis — AIN ${fmtAin(ain)}/100\n\n`;
         text += `| Pool | Token A | Token B | Ratio | Balance |\n`;
         text += `|------|---------|---------|-------|---------|\n`;
         for (const r of rows) {
@@ -150,7 +151,7 @@ export function registerCryptoTools(server: Server, getClient: () => ZPLEngineCl
         text += `${counts.balanced} of ${rows.length} pools BALANCED`;
         if (counts.slight > 0) text += `, ${counts.slight} SLIGHT`;
         if (counts.imbalanced > 0) text += `, ${counts.imbalanced} IMBALANCED`;
-        text += `. Aggregate AIN ${ain}/100 — `;
+        text += `. Aggregate AIN ${fmtAin(ain)}/100 — `;
         if (ain >= 70) text += `pools are well-balanced overall. Low impermanent loss risk.\n`;
         else if (ain >= 40) text += `some imbalance present. Monitor for impermanent loss.\n`;
         else text += `significant imbalance. High impermanent loss risk — consider rebalancing.\n`;
@@ -189,10 +190,10 @@ export function registerCryptoTools(server: Server, getClient: () => ZPLEngineCl
         const d = clampD(pcts.length);
         const bias = concentrationBias(pcts);
         const result = await client.compute({ d, bias, samples: 2000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
         const label = token ?? "Token";
 
-        let text = `## ${label} Tokenomics — AIN ${ain}/100\n\n`;
+        let text = `## ${label} Tokenomics — AIN ${fmtAin(ain)}/100\n\n`;
         text += `| Category | % Supply | ${allocations[0].vesting_months !== undefined ? "Vesting |" : ""}\n`;
         text += `|----------|----------|${allocations[0].vesting_months !== undefined ? "---------|" : ""}\n`;
         for (const a of allocations) {

@@ -8,11 +8,13 @@
  * → Engine computes AIN for each → balanced mathematical answer
  *
  * This is what makes ZPL unique: not opinions, but math.
- * Score range: 0.1 to 99.9 — full engine precision.
+ * Score: the engine's AIN on the 0.0-1.0 scale (6 decimals), displayed here on
+ * a 0-100 scale with its decimals kept — see src/ain-format.ts.
  */
 
 import type { ComputeResponse } from "../engine-client.js";
 import type { DomainLens, DomainInterpretation } from "./types.js";
+import { ainScale, fmtAin } from "../ain-format.js";
 
 /**
  * Given an array of factor scores (0-10) for one option,
@@ -87,7 +89,7 @@ export const universalLens: DomainLens = {
   },
 
   interpret(result: ComputeResponse, input: Record<string, unknown>): DomainInterpretation {
-    const ain = Math.round(result.ain * 100);
+    const ain = ainScale(result.ain);
     const context = (input.context as string) ?? "choice";
 
     let signal: string;
@@ -98,15 +100,15 @@ export const universalLens: DomainLens = {
     else signal = "POOR_BALANCE";
 
     return {
-      summary: `${context}: AIN ${ain}/100`,
+      summary: `${context}: AIN ${fmtAin(ain)}/100`,
       ain,
       status: result.ain_status,
       signal,
       details: {
-        "AIN Score": ain,
+        "AIN Score": `${fmtAin(ain)}/100`,
         "Balance": result.ain_status,
       },
-      recommendation: `This ${context} scores ${ain}/100 on mathematical balance.`,
+      recommendation: `This ${context} scores ${fmtAin(ain)}/100 on mathematical balance.`,
     };
   },
 
@@ -151,7 +153,7 @@ export function interpretOption(
   factors: string[],
   scores: number[],
 ): OptionResult {
-  const ain = Math.round(result.ain * 100);
+  const ain = ainScale(result.ain);
   let signal: string;
   if (ain >= 75) signal = "EXCELLENT";
   else if (ain >= 55) signal = "GOOD";
@@ -191,18 +193,18 @@ export function formatAskResult(
   let summary = `## ${question}\n\n`;
 
   for (const opt of sorted) {
-    summary += `- **${opt.name}** — AIN ${opt.ain}/100\n`;
+    summary += `- **${opt.name}** — AIN ${fmtAin(opt.ain)}/100\n`;
   }
 
   if (sorted.length >= 2) {
     const diff = sorted[0].ain - sorted[1].ain;
     summary += `\n`;
     if (diff <= 5) {
-      summary += `Very close — **${sorted[0].name}** (${sorted[0].ain}) and **${sorted[1].name}** (${sorted[1].ain}) score nearly equal. Personal preference decides.`;
+      summary += `Very close — **${sorted[0].name}** (${fmtAin(sorted[0].ain)}) and **${sorted[1].name}** (${fmtAin(sorted[1].ain)}) score nearly equal. Personal preference decides.`;
     } else if (diff <= 15) {
-      summary += `**${sorted[0].name}** (${sorted[0].ain}) scores higher than **${sorted[1].name}** (${sorted[1].ain}).`;
+      summary += `**${sorted[0].name}** (${fmtAin(sorted[0].ain)}) scores higher than **${sorted[1].name}** (${fmtAin(sorted[1].ain)}).`;
     } else {
-      summary += `**${sorted[0].name}** (${sorted[0].ain}) scores clearly higher than **${sorted[1].name}** (${sorted[1].ain}).`;
+      summary += `**${sorted[0].name}** (${fmtAin(sorted[0].ain)}) scores clearly higher than **${sorted[1].name}** (${fmtAin(sorted[1].ain)}).`;
     }
   }
 

@@ -8,6 +8,7 @@
 
 import type { ComputeResponse, SweepResponse } from "../engine-client.js";
 import type { DomainLens, DomainInterpretation } from "./types.js";
+import { ainScale, fmtAin } from "../ain-format.js";
 
 export const gameLens: DomainLens = {
   id: "game",
@@ -61,7 +62,7 @@ export const gameLens: DomainLens = {
   },
 
   interpret(result: ComputeResponse, input: Record<string, unknown>): DomainInterpretation {
-    const ain = Math.round(result.ain * 100);
+    const ain = ainScale(result.ain);
     const gameType = (input.game_type as string) ?? "game";
 
     let signal: string;
@@ -85,12 +86,12 @@ export const gameLens: DomainLens = {
     }
 
     return {
-      summary: `${gameType} Balance: AIN ${ain}/100 — ${signal}`,
+      summary: `${gameType} Balance: AIN ${fmtAin(ain)}/100 — ${signal}`,
       ain,
       status: result.ain_status,
       signal,
       details: {
-        "AIN Score": ain,
+        "AIN Score": `${fmtAin(ain)}/100`,
         "Balance Status": result.ain_status,
         "Tokens Used": result.tokens_used,
       },
@@ -102,12 +103,12 @@ export const gameLens: DomainLens = {
     const gameType = (input.game_type as string) ?? "game";
     let summary = `## ${gameType} Balance Sweep\n\n`;
     summary += `Tests how your ${gameType} economy behaves across 19 bias levels:\n\n`;
-    summary += `| Bias | AIN | Status |\n|------|-----|--------|\n`;
+    summary += `| Bias | AIN | Verdict |\n|------|-----|--------|\n`;
 
     for (const r of result.results) {
-      const ainPct = Math.round(r.ain * 100);
-      const emoji = ainPct >= 70 ? "BALANCED" : ainPct >= 40 ? "CAUTION" : "BROKEN";
-      summary += `| ${r.bias.toFixed(2)} | ${ainPct}% | ${emoji} |\n`;
+      const ainScaled = ainScale(r.ain);
+      const emoji = ainScaled >= 70 ? "BALANCED" : ainScaled >= 40 ? "CAUTION" : "BROKEN";
+      summary += `| ${r.bias.toFixed(2)} | ${fmtAin(ainScaled)}% | ${emoji} |\n`;
     }
 
     summary += `\n*Tokens used: ${result.total_tokens}*`;

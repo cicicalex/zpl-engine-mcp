@@ -131,6 +131,12 @@ The ZPL Engine computes the **AIN (AI Neutrality Index)** — a mathematical mea
 
 One engine, multiple domains. The engine doesn't know what your data represents — domain "lenses" translate your specific data into the universal mathematical framework.
 
+### Reading the numbers
+
+- **`ain`** — returned by the engine on a **0.0 – 1.0** scale with **6 decimals**. Human-readable tool output shows it on a 0 – 100 scale **with its decimals kept** (`93.24/100`), never rounded to a whole number. `zpl_score_only` returns the raw engine value untouched.
+- **`ain_status`** — quality of the equilibrium: `CERTIFIED_NEUTRAL`, `HIGHLY_NEUTRAL`, `NEUTRAL`, `MODERATE_BIAS`, `SIGNIFICANT_BIAS`, `HIGH_BIAS`.
+- **`status`** — a **different** field: the stability regime, `STABLE`, `ACTIVE`, `INHIBITED_HIGH`, `INHIBITED_LOW`. There is no plain `INHIBITED` value. Sweep steps carry `status`, not `ain_status`.
+
 ## Modes (ZPL_MODE)
 
 ZPL Engine MCP supports two modes for how text-evaluation results are returned:
@@ -224,7 +230,7 @@ Unique tool names: 63. With 4 backwards-compat aliases (`zpl_balance_*` pairs) t
 |------|------|---------|
 | `zpl_about` | No | Project info + doc links — works before signup |
 | `zpl_quota` | Yes | Remaining tokens this month, reset date |
-| `zpl_score_only` | Yes | Minimal JSON `{ain, status}` for CI/CD pipelines |
+| `zpl_score_only` | Yes | Minimal JSON `{ain, ain_status, status, tokens}` for CI/CD pipelines — `ain` is the raw engine value (0.0-1.0), unrounded |
 | `zpl_validate_input` | No | Input validation with no token cost — sanity check before paying |
 
 ### v3.0.0 Removed Tools (and why)
@@ -321,7 +327,7 @@ ZPL Engine MCP Server (this package)
 ZPL Engine API (engine.zeropointlogic.io)
     |
     v (Post-binary computation)
-    AIN Result (0.1-99.9)
+    AIN Result (0.0-1.0, 6 decimals)
 ```
 
 The MCP server **never** sees or contains the engine formula. It sends `(d, bias, samples)` and receives `(ain, deviation, status)`. All computation happens server-side.

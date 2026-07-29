@@ -638,3 +638,29 @@ Removed 5 tools that created false-authority risk. AIN is a STABILITY measuremen
 [2.1.0]: https://github.com/cicicalex/zpl-engine-mcp/releases/tag/v2.1.0
 [2.0.0]: https://github.com/cicicalex/zpl-engine-mcp/releases/tag/v2.0.0
 [1.0.0]: https://github.com/cicicalex/zpl-engine-mcp/releases/tag/v1.0.0
+
+---
+
+## Correction note — AIN scale and precision
+
+This note corrects earlier entries in this file. **The entries above are left as
+written** (a changelog records what was said at the time); read this note as the
+authoritative statement.
+
+- The `2.0.0` entry says *"AIN range corrected to full engine precision 0.1-99.9"*.
+  That is wrong on both counts. The engine returns `ain` on a **0.0 - 1.0** scale
+  with **6 decimals**. There is no `0.1 - 99.9` range, and displaying an integer
+  percentage is not "full engine precision" - it discards 4 of the 6 decimals.
+- Client code up to and including 4.2.1 rounded AIN with `Math.round(ain * 100)`
+  before display, so `0.932415` was shown as `93`. Output now keeps the decimals
+  (`93.24/100`), and `zpl_score_only` returns the raw engine value unrounded.
+- `ain_status` (CERTIFIED_NEUTRAL / HIGHLY_NEUTRAL / NEUTRAL / MODERATE_BIAS /
+  SIGNIFICANT_BIAS / HIGH_BIAS) and `status` (STABLE / ACTIVE / INHIBITED_HIGH /
+  INHIBITED_LOW) are two different fields and were documented as if they were one.
+  There is no plain `INHIBITED` value.
+- `zpl_score_only` previously emitted `ain_status` under the JSON key `status`.
+  It now emits both fields under their real names; consumers reading `status` will
+  see the stability regime instead of the equilibrium quality.
+- `zpl_quota` and `zpl_usage` report a **local estimate** computed from this MCP's
+  own history and a client-declared plan. They never query the engine. Their output
+  now says so; the authoritative quota lives on the engine.

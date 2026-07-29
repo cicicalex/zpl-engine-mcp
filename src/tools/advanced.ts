@@ -8,6 +8,7 @@ import type { Server } from "./helpers.js";
 import { distributionBias, directionalBias, concentrationBias, clampD, ainSignal, ZPL_DISCLAIMER } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory, getHistory, estimateOpTokens } from "../store.js";
+import { ainScale, fmtAin } from "../ain-format.js";
 
 // --- Shared schema + handler for zpl_versus / zpl_balance_compare ---
 
@@ -38,7 +39,7 @@ function makeVersusHandler(getClient: () => ZPLEngineClient) {
         const r = await client.compute({ d, bias, samples: 1000 });
         results.push({
           name: item.name,
-          ain: Math.round(r.ain * 100),
+          ain: ainScale(r.ain),
           status: r.ain_status,
           tokens: r.tokens_used,
         });
@@ -53,7 +54,7 @@ function makeVersusHandler(getClient: () => ZPLEngineClient) {
       for (let i = 0; i < results.length; i++) {
         const medal = i === 0 ? "1st" : i === 1 ? "2nd" : i === 2 ? "3rd" : `${i + 1}th`;
         const bar = "=".repeat(Math.round(results[i].ain / 5));
-        text += `**${medal} ${results[i].name}** — AIN ${results[i].ain}/100 (${results[i].status})\n`;
+        text += `**${medal} ${results[i].name}** — AIN ${fmtAin(results[i].ain)}/100 (${results[i].status})\n`;
         text += `\`[${bar}${"·".repeat(20 - Math.round(results[i].ain / 5))}]\`\n\n`;
       }
 
@@ -71,7 +72,7 @@ function makeVersusHandler(getClient: () => ZPLEngineClient) {
         text += `\n`;
       }
 
-      text += `\n**Winner:** ${results[0].name} (AIN ${results[0].ain}) — most mathematically balanced\n`;
+      text += `\n**Winner:** ${results[0].name} (AIN ${fmtAin(results[0].ain)}) — most mathematically balanced\n`;
       text += `**Total tokens:** ${results.reduce((s, r) => s + r.tokens, 0)}`;
 
       const scores: Record<string, number> = {};
@@ -173,15 +174,15 @@ or any future event.`,
           client.compute({ d, bias: biasMod, samples: 2000 }),
         ]);
 
-        const ainBase = Math.round(resultBase.ain * 100);
-        const ainMod = Math.round(resultMod.ain * 100);
+        const ainBase = ainScale(resultBase.ain);
+        const ainMod = ainScale(resultMod.ain);
         const delta = ainMod - ainBase;
 
         let text = `## Simulation: ${scenario}\n\n`;
 
         // Before vs After
         text += `| | Before | After | Change |\n|---|--------|-------|--------|\n`;
-        text += `| **AIN** | ${ainBase}/100 | ${ainMod}/100 | ${delta > 0 ? "+" : ""}${delta} |\n`;
+        text += `| **AIN** | ${fmtAin(ainBase)}/100 | ${fmtAin(ainMod)}/100 | ${delta > 0 ? "+" : ""}${fmtAin(delta)} |\n`;
         text += `| **Status** | ${resultBase.ain_status} | ${resultMod.ain_status} | |\n`;
         text += `| **Signal** | ${ainSignal(ainBase)} | ${ainSignal(ainMod)} | |\n`;
 
@@ -198,11 +199,11 @@ or any future event.`,
 
         // Verdict
         text += `\n### Verdict\n\n`;
-        if (delta > 10) text += `**POSITIVE:** This scenario significantly improves stability (+${delta} AIN). The system becomes more balanced.\n`;
-        else if (delta > 0) text += `**SLIGHTLY POSITIVE:** Marginal improvement (+${delta} AIN). Minor positive effect on balance.\n`;
+        if (delta > 10) text += `**POSITIVE:** This scenario significantly improves stability (+${fmtAin(delta)} AIN). The system becomes more balanced.\n`;
+        else if (delta > 0) text += `**SLIGHTLY POSITIVE:** Marginal improvement (+${fmtAin(delta)} AIN). Minor positive effect on balance.\n`;
         else if (delta === 0) text += `**NEUTRAL:** No change in stability. This scenario has no measurable impact.\n`;
-        else if (delta > -10) text += `**SLIGHTLY NEGATIVE:** Minor instability introduced (${delta} AIN). Monitor but not critical.\n`;
-        else text += `**NEGATIVE:** This scenario significantly destabilizes the system (${delta} AIN). Proceed with caution!\n`;
+        else if (delta > -10) text += `**SLIGHTLY NEGATIVE:** Minor instability introduced (${fmtAin(delta)} AIN). Monitor but not critical.\n`;
+        else text += `**NEGATIVE:** This scenario significantly destabilizes the system (${fmtAin(delta)} AIN). Proceed with caution!\n`;
 
         text += `\n**Tokens:** ${resultBase.tokens_used + resultMod.tokens_used}\n\n`;
         text += `> ⚠️  **Hypothetical comparison only.** This is not a forecast. ` +
@@ -268,7 +269,7 @@ or any future event.`,
       text += `| Rank | Name | AIN | Signal | Date |\n|------|------|-----|--------|------|\n`;
       for (let i = 0; i < Math.min(top, sorted.length); i++) {
         const s = sorted[i];
-        text += `| ${i + 1} | ${s.name} | ${s.ain}/100 | ${ainSignal(s.ain)} | ${s.date} |\n`;
+        text += `| ${i + 1} | ${s.name} | ${fmtAin(s.ain)}/100 | ${ainSignal(s.ain)} | ${s.date} |\n`;
       }
 
       // Most unstable
@@ -278,7 +279,7 @@ or any future event.`,
         text += `| Rank | Name | AIN | Signal | Date |\n|------|------|-----|--------|------|\n`;
         for (let i = 0; i < unstable.length; i++) {
           const s = unstable[i];
-          text += `| ${i + 1} | ${s.name} | ${s.ain}/100 | ${ainSignal(s.ain)} | ${s.date} |\n`;
+          text += `| ${i + 1} | ${s.name} | ${fmtAin(s.ain)}/100 | ${ainSignal(s.ain)} | ${s.date} |\n`;
         }
       }
 
@@ -351,7 +352,7 @@ or any future event.`,
       for (const p of points) text += `${p.date.slice(0, 2)} `;
       text += `\n\`\`\`\n`;
 
-      text += `**Points:** ${points.length} | **Range:** ${Math.round(minAin)}-${Math.round(maxAin)} AIN`;
+      text += `**Points:** ${points.length} | **Range:** ${fmtAin(minAin)}-${fmtAin(maxAin)} AIN`;
 
       return { content: [{ type: "text" as const, text }] };
     }
@@ -402,8 +403,9 @@ The engine takes 3 inputs:
 - **samples:** precision (100-50,000)
 
 And returns:
-- **AIN:** neutrality score (0.1-99.9)
-- **status:** CERTIFIED_NEUTRAL, NEUTRAL, MODERATE_BIAS, HIGH_BIAS, EXTREME_BIAS
+- **AIN:** neutrality score, returned on a 0.0-1.0 scale with 6 decimals (shown here on a 0-100 scale, decimals kept)
+- **ain_status:** CERTIFIED_NEUTRAL, HIGHLY_NEUTRAL, NEUTRAL, MODERATE_BIAS, SIGNIFICANT_BIAS, HIGH_BIAS
+- **status** (stability regime, a different field): STABLE, ACTIVE, INHIBITED_HIGH, INHIBITED_LOW
 - **deviation:** mathematical deviation from perfect neutrality
 
 **The formula is a trade secret.** The MCP only sends parameters and receives results — no computation logic is exposed.`,
@@ -459,17 +461,17 @@ Built by Zero Point Logic — published on Zenodo with DOI.`,
 - ANY decision: "Pizza or hotdog?" with mathematical scoring
 - Compare anything: products, frameworks, strategies, ideas`,
 
-        "scoring-guide": `## AIN Scoring Guide
+        "scoring-guide": `## AIN Scoring Guide (0-100 display scale; the engine returns 0.0-1.0 with 6 decimals)
 
 | Score | Grade | Meaning |
 |-------|-------|---------|
-| 90-99.9 | A+ | EXCEPTIONAL — Perfect or near-perfect neutrality |
+| 90-100 | A+ | EXCEPTIONAL — Perfect or near-perfect neutrality |
 | 80-89 | A | EXCELLENT — Very well balanced |
 | 70-79 | B+ | GOOD — Well balanced with minor deviations |
 | 60-69 | B | ACCEPTABLE — Functional balance, some asymmetry |
 | 40-59 | C | MODERATE — Noticeable imbalance, needs attention |
 | 20-39 | D | WEAK — Significant bias, action needed |
-| 0.1-19 | F | CRITICAL — Extreme bias, system is broken |
+| 0-19 | F | CRITICAL — Extreme bias, system is broken |
 
 **Token cost (tiered by dimension):**
 - d=3–5: 1 token
@@ -582,8 +584,8 @@ https://zeropointlogic.io`,
         const alert = lastAin < target;
 
         const text = alert
-          ? `**ALERT:** Last AIN score (${lastAin}) is below threshold (${target}). Action may be needed.`
-          : `**OK:** Last AIN score (${lastAin}) is above threshold (${target}). No alert.`;
+          ? `**ALERT:** Last AIN score (${fmtAin(lastAin)}) is below threshold (${target}). Action may be needed.`
+          : `**OK:** Last AIN score (${fmtAin(lastAin)}) is above threshold (${target}). No alert.`;
         return { content: [{ type: "text" as const, text }] };
       }
 

@@ -8,6 +8,7 @@ import type { Server } from "./helpers.js";
 import { distributionBias, clampD, ainSignal, maybeRedactForPureMode } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
+import { ainScale, fmtAin } from "../ain-format.js";
 
 /**
  * Client-side preprocessing — converts raw text into a small set of normalized
@@ -97,7 +98,7 @@ export function registerCertificationTools(server: Server, getClient: () => ZPLE
 
         const d = clampD(args_a.length + args_b.length);
         const result = await client.compute({ d, bias: (biasA + biasB + overallBias) / 3, samples: 1000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
         let text = `## Debate: ${topic}\n\n`;
         text += `### ${side_a}\n`;
@@ -105,7 +106,7 @@ export function registerCertificationTools(server: Server, getClient: () => ZPLE
         text += `\n### ${side_b}\n`;
         args_b.forEach((a, i) => { text += `${i + 1}. ${a}\n`; });
         text += `\n---\n`;
-        text += `**Debate Balance AIN: ${ain}/100 (${ainSignal(ain)})**\n`;
+        text += `**Debate Balance AIN: ${fmtAin(ain)}/100 (${ainSignal(ain)})**\n`;
         text += ain >= 70
           ? `Both sides are well-represented. This is a fair debate.\n`
           : ain >= 40
@@ -136,11 +137,11 @@ export function registerCertificationTools(server: Server, getClient: () => ZPLE
         const analysis = analyzeText(text);
         const d = clampD(Math.max(7, Math.min(20, Math.floor(analysis.sentences / 3))));
         const result = await client.compute({ d, bias: analysis.combinedBias, samples: 1000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
         let output = `## Language Balance Score: "${title}"\n\n`;
         output += `| Metric | Value |\n|--------|-------|\n`;
-        output += `| Language Balance (AIN) | **${ain}/100** |\n`;
+        output += `| Language Balance (AIN) | **${fmtAin(ain)}/100** |\n`;
         output += `| Signal | ${ainSignal(ain)} |\n`;
         output += `| Positive-coded words | ${analysis.positive} |\n`;
         output += `| Negative-coded words | ${analysis.negative} |\n`;
@@ -194,12 +195,12 @@ export function registerCertificationTools(server: Server, getClient: () => ZPLE
 
         const d = clampD(Math.max(5, analysis.sentences));
         const result = await client.compute({ d, bias: combinedBias, samples: 1000 });
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
         let output = `## Review Wording Balance: ${product}\n\n`;
         if (rating) output += `**Rating provided:** ${"★".repeat(rating)}${"☆".repeat(5 - rating)} (${rating}/5)\n\n`;
         output += `| Metric | Value |\n|---|---|\n`;
-        output += `| Language Balance (AIN) | **${ain}/100** (${ainSignal(ain)}) |\n`;
+        output += `| Language Balance (AIN) | **${fmtAin(ain)}/100** (${ainSignal(ain)}) |\n`;
         output += `| Positive-coded words | ${analysis.positive} |\n`;
         output += `| Negative-coded words | ${analysis.negative} |\n`;
         output += `| Hedging words | ${analysis.neutral} |\n`;

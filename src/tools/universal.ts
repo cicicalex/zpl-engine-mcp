@@ -8,6 +8,7 @@ import type { Server } from "./helpers.js";
 import { distributionBias, clampD, ainSignal, maybeRedactForPureMode } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
+import { ainScale, fmtAin } from "../ain-format.js";
 
 // --- Shared schemas (used by old + new aliases) ---
 
@@ -63,22 +64,22 @@ function makeDecideHandler(getClient: () => ZPLEngineClient) {
         client.compute(paramB),
       ]);
 
-      const ainA = Math.round(resultA.ain * 100);
-      const ainB = Math.round(resultB.ain * 100);
+      const ainA = ainScale(resultA.ain);
+      const ainB = ainScale(resultB.ain);
 
       let text = `## ${question}\n\n`;
       text += `| | ${option_a} | ${option_b} |\n`;
       text += `|---|---|---|\n`;
       text += `| Pros | ${a_pros}/10 | ${b_pros}/10 |\n`;
       text += `| Cons | ${a_cons}/10 | ${b_cons}/10 |\n`;
-      text += `| **AIN** | **${ainA}/100** | **${ainB}/100** |\n`;
+      text += `| **AIN** | **${fmtAin(ainA)}/100** | **${fmtAin(ainB)}/100** |\n`;
       text += `| Signal | ${ainSignal(ainA)} | ${ainSignal(ainB)} |\n`;
 
       const diff = Math.abs(ainA - ainB);
       const winner = ainA > ainB ? option_a : ainB > ainA ? option_b : "Tie";
 
       if (diff <= 5) text += `\n**Result:** Practically equal. Go with your gut.\n`;
-      else if (diff <= 15) text += `\n**Result:** **${winner}** is slightly more balanced (${Math.max(ainA, ainB)} vs ${Math.min(ainA, ainB)}).\n`;
+      else if (diff <= 15) text += `\n**Result:** **${winner}** is slightly more balanced (${fmtAin(Math.max(ainA, ainB))} vs ${fmtAin(Math.min(ainA, ainB))}).\n`;
       else text += `\n**Result:** **${winner}** is clearly the more balanced choice.\n`;
 
       text += `**Tokens:** ${resultA.tokens_used + resultB.tokens_used}`;
@@ -113,15 +114,15 @@ function makeCompareHandler(getClient: () => ZPLEngineClient) {
         client.compute({ d, bias: biasB, samples: 1000 }),
       ]);
 
-      const ainA = Math.round(resultA.ain * 100);
-      const ainB = Math.round(resultB.ain * 100);
+      const ainA = ainScale(resultA.ain);
+      const ainB = ainScale(resultB.ain);
 
       let text = `## ${item_a} vs ${item_b}\n\n`;
       text += `| Criteria | ${item_a} | ${item_b} |\n|----------|---|---|\n`;
       for (const c of criteria) {
         text += `| ${c.name} | ${c.score_a}/10 | ${c.score_b}/10 |\n`;
       }
-      text += `| **AIN** | **${ainA}** | **${ainB}** |\n`;
+      text += `| **AIN** | **${fmtAin(ainA)}** | **${fmtAin(ainB)}** |\n`;
 
       const winner = ainA > ainB ? item_a : ainB > ainA ? item_b : "Tie";
       text += `\n**More balanced:** ${winner}\n`;
@@ -150,17 +151,17 @@ function makeRankHandler(getClient: () => ZPLEngineClient) {
         const d = clampD(opt.scores.length);
         const bias = distributionBias(opt.scores);
         const r = await client.compute({ d, bias, samples: 1000 });
-        results.push({ name: opt.name, ain: Math.round(r.ain * 100), tokens: r.tokens_used });
+        results.push({ name: opt.name, ain: ainScale(r.ain), tokens: r.tokens_used });
       }
 
       results.sort((a, b) => b.ain - a.ain);
       let text = `## AIN Ranking\n\n`;
       text += `| Rank | Option | AIN | Signal |\n|------|--------|-----|--------|\n`;
       for (let i = 0; i < results.length; i++) {
-        text += `| ${i + 1} | ${results[i].name} | ${results[i].ain}/100 | ${ainSignal(results[i].ain)} |\n`;
+        text += `| ${i + 1} | ${results[i].name} | ${fmtAin(results[i].ain)}/100 | ${ainSignal(results[i].ain)} |\n`;
       }
 
-      text += `\n**Best:** ${results[0].name} (${results[0].ain}) | **Worst:** ${results[results.length - 1].name} (${results[results.length - 1].ain})\n`;
+      text += `\n**Best:** ${results[0].name} (${fmtAin(results[0].ain)}) | **Worst:** ${results[results.length - 1].name} (${fmtAin(results[results.length - 1].ain)})\n`;
       text += `**Tokens:** ${results.reduce((s, r) => s + r.tokens, 0)}`;
 
       const scores: Record<string, number> = {};
@@ -265,12 +266,12 @@ export function registerUniversalTools(server: Server, getClient: () => ZPLEngin
         const d = clampD(Math.max(5, Math.min(15, Math.floor(sentences.length / 2))));
         const result = await client.compute({ d, bias: Math.round(combinedBias * 100) / 100, samples: 1000 });
 
-        const ain = Math.round(result.ain * 100);
+        const ain = ainScale(result.ain);
 
-        let output = `## ZPL Bias Check — AIN ${ain}/100 (${ainSignal(ain)})\n\n`;
+        let output = `## ZPL Bias Check — AIN ${fmtAin(ain)}/100 (${ainSignal(ain)})\n\n`;
         if (context) output += `**Context:** ${context}\n\n`;
         output += `| Metric | Value |\n|--------|-------|\n`;
-        output += `| AIN Score | ${ain}/100 |\n`;
+        output += `| AIN Score | ${fmtAin(ain)}/100 |\n`;
         output += `| Status | ${result.ain_status} |\n`;
         output += `| Positive words | ${positiveWords} |\n`;
         output += `| Negative words | ${negativeWords} |\n`;
@@ -355,7 +356,7 @@ export function registerUniversalTools(server: Server, getClient: () => ZPLEngin
         action,
         ``,
         `---`,
-        `*AIN (AI Neutrality Index) measures mathematical balance on a scale from 0.1 (extreme bias) to 99.9 (perfect neutrality). Computed by the ZPL Engine at engine.zeropointlogic.io.*`,
+        `*AIN (AI Neutrality Index) measures mathematical balance. The engine returns it on a 0.0 – 1.0 scale with 6 decimals; it is shown here on a 0 – 100 scale (0 = extreme bias, 100 = perfect neutrality). Computed by the ZPL Engine at engine.zeropointlogic.io.*`,
       ].join("\n");
 
       return { content: [{ type: "text" as const, text }] };

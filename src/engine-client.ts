@@ -14,13 +14,28 @@ export interface ComputeRequest {
   samples?: number; // 100-50000
 }
 
+/**
+ * `ain_status` and `status` are TWO DIFFERENT FIELDS with different value sets.
+ * They have been mixed up repeatedly in docs — do not treat them as synonyms.
+ *
+ *  ain_status — quality of the equilibrium, derived from `ain`:
+ *               CERTIFIED_NEUTRAL | HIGHLY_NEUTRAL | NEUTRAL |
+ *               MODERATE_BIAS | SIGNIFICANT_BIAS | HIGH_BIAS
+ *
+ *  status     — stability regime:
+ *               STABLE | ACTIVE | INHIBITED_HIGH | INHIBITED_LOW
+ *               (there is no plain "INHIBITED" value)
+ */
 export interface ComputeResponse {
   d: number;
   bias: number;
   p_output: number;
+  /** Equilibrium score, 0.0–1.0 with 6 decimals. Never round to whole percent — see src/ain-format.ts. */
   ain: number;
+  /** Equilibrium quality — see the note above; NOT the same field as `status`. */
   ain_status: string;
   deviation: number;
+  /** Stability regime — see the note above; NOT the same field as `ain_status`. */
   status: string;
   samples: number;
   tokens_used: number;
@@ -30,8 +45,10 @@ export interface ComputeResponse {
 export interface SweepResult {
   bias: number;
   p_output: number;
+  /** Equilibrium score, 0.0–1.0 with 6 decimals. */
   ain: number;
   deviation: number;
+  /** Stability regime (STABLE / ACTIVE / INHIBITED_HIGH / INHIBITED_LOW) — sweep steps carry no ain_status. */
   status: string;
 }
 
