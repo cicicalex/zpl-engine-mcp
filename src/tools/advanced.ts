@@ -379,7 +379,7 @@ or any future event.`,
 
 **AIN (AI Neutrality Index)** is a mathematical measure of how balanced, stable, or neutral a system is.
 
-- Score: **0.1** (extreme bias) to **99.9** (perfect neutrality)
+- Score: **0** (extreme bias) to **100** (perfect neutrality), reported with decimals
 - It doesn't guess — it computes
 - Works on ANY data: prices, game stats, model outputs, risk scores, token distributions
 
