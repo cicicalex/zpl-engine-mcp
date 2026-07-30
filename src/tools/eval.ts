@@ -111,7 +111,7 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
   // =========================================================================
   server.tool(
     "zpl_consistency_test",
-    "Test AI response consistency. Runs the same prompt multiple times through Claude and measures how consistent the responses are. AIN HIGH = consistent, LOW = inconsistent. Requires ANTHROPIC_API_KEY.",
+    "Test AI response consistency. Runs the same prompt multiple times through Claude and groups the answers by similarity. Reports a consistency score: 100 = every answer the same, 0 = every answer different. Requires ANTHROPIC_API_KEY.",
     {
       prompt: z.string().min(5).max(2000).describe("The prompt to test for consistency"),
       runs: z.number().int().min(3).max(20).optional().default(5).describe("Number of runs (3-20, default 5)"),
@@ -196,7 +196,7 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
   // =========================================================================
   server.tool(
     "zpl_sycophancy_score",
-    "Test AI sycophancy. Presents a FALSE claim and checks if the model agrees, disagrees, or gives a nuanced response. AIN HIGH = balanced (not sycophantic), LOW = sycophantic (always agrees). Requires ANTHROPIC_API_KEY.",
+    "Test AI sycophancy. Presents a FALSE claim and checks whether the model agrees, disagrees, or answers with nuance. Reports a pushback score: 100 = rejects the false claim every time, 0 = agrees with it every time. Requires ANTHROPIC_API_KEY.",
     {
       claim: z.string().min(5).max(1000).describe("A FALSE claim to test (e.g. 'The earth is flat')"),
       runs: z.number().int().min(3).max(10).optional().default(5).describe("Number of runs (3-10, default 5)"),
@@ -272,7 +272,7 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
   // =========================================================================
   server.tool(
     "zpl_refusal_balance",
-    "Test AI refusal policy balance. Sends multiple prompts and checks which are answered vs refused. AIN HIGH = balanced refusal policy, LOW = over/under-refusing. Requires ANTHROPIC_API_KEY.",
+    "Test AI refusal policy. Sends prompts and checks which are answered vs refused. With per-prompt categories it reports accuracy AND direction — whether the model is over-refusing (blocking safe prompts) or under-refusing (answering dangerous ones). Without categories it reports the refusal rate only, since nothing says whether that rate is right. Requires ANTHROPIC_API_KEY.",
     {
       prompts: z.array(z.string().max(500)).min(5).max(50).describe("Prompts to test (mix of safe and potentially sensitive)"),
       categories: z.array(z.enum(["safe", "borderline", "dangerous"])).optional().describe("Optional category for each prompt (same length as prompts)"),
@@ -433,7 +433,7 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
   // =========================================================================
   server.tool(
     "zpl_persona_drift",
-    "Test AI persona consistency. Assigns a persona and sends a conversation, checking if the model stays in character. AIN HIGH = consistent persona, LOW = drifting. Requires ANTHROPIC_API_KEY.",
+    "Test AI persona consistency. Assigns a persona and sends a conversation, checking whether the model stays in character. Reports the share of replies that held the persona: 100 = never broke character, 0 = broke every time. Requires ANTHROPIC_API_KEY.",
     {
       persona: z.string().min(5).max(500).describe("The persona to assign (e.g. 'a strict physics professor')"),
       messages: z.array(z.string().max(500)).min(5).max(20).describe("User messages to send sequentially (5-20)"),
@@ -579,7 +579,7 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
   // =========================================================================
   server.tool(
     "zpl_hallucination_consistency",
-    "Test AI factual consistency. Asks the same factual questions multiple times and checks if answers stay consistent. Inconsistency suggests hallucination. AIN HIGH = factually stable, LOW = hallucinating. Requires ANTHROPIC_API_KEY.",
+    "Test AI factual consistency. Asks the same factual questions several times and checks whether the answers hold. Reports a consistency score: 100 = every answer stable across runs, 0 = every answer changed. Low scores suggest hallucination. Requires ANTHROPIC_API_KEY.",
     {
       questions: z.array(z.string().max(500)).min(3).max(10).describe("Factual questions to test (3-10)"),
       runs_per_question: z.number().int().min(2).max(5).optional().default(3).describe("Times to ask each question (2-5, default 3)"),
