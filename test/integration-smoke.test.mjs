@@ -137,18 +137,46 @@ async function callTool(name, args) {
   return res;
 }
 
-/** Apply an assertion ONLY if the call wasn't rate-limited or schema-rejected. */
+/**
+ * AUDIT 2026-07-30: this file used to convert a schema rejection into a
+ * "__SCHEMA_REJECTED__" sentinel, and matchOrSkip then quietly dropped every
+ * assertion that received it. The stated reason — a fixture feeding the wrong
+ * shape is not a bug in the tool — is true, but the conclusion was backwards:
+ * a fixture that no longer matches its tool's schema means that tool has
+ * stopped being tested at all, and that is exactly what a test suite exists
+ * to report.
+ *
+ * It went unnoticed because the suite kept saying what everyone wanted to
+ * hear. A full run printed "tests 158 · pass 158 · fail 0 · skipped 0" while
+ * eleven tools — validate_input, analyze, explain, debate, correlation,
+ * news_bias, review_bias, risk_score, vuln_map, watchlist, whale_check —
+ * were rejected before reaching the engine and asserted nothing. That green
+ * number was quoted as evidence in several reports, including mine.
+ *
+ * A schema rejection is now a failure. Rate limiting is still tolerated,
+ * because that one really is environmental and outside the code's control —
+ * but it is counted, and a run that skipped too much can no longer pass.
+ */
+
+/** Rate-limited calls, tallied so a mostly-skipped run cannot report clean. */
+const rateLimited = [];
+
+/** Apply an assertion unless the call was rate-limited by Cloudflare. */
 function matchOrSkip(text, regex, name = "") {
-  if (text === "__RATE_LIMITED__" || text === "__SCHEMA_REJECTED__") return;
+  if (text === "__RATE_LIMITED__") return;
   assert.match(text, regex, `${name}: text didn't match ${regex}`);
 }
 
 /**
- * Returns text content. If the call was blocked by Cloudflare rate limit
- * (a frequent occurrence when running 30+ tools in quick succession from
- * a single IP), logs and returns a sentinel so individual tests can skip
- * their assertions instead of failing — Bug #8's well-formed error message
- * is itself the proof the detection works.
+ * Returns the tool's text content.
+ *
+ * Fails on a schema rejection: it means this fixture no longer matches the
+ * tool's declared input, so the tool is not being exercised. The validation
+ * message is included because it names the exact field that drifted.
+ *
+ * Returns a sentinel only for a Cloudflare rate limit, which happens when
+ * 40+ tools are called in quick succession from one IP and says nothing
+ * about the code under test.
  */
 function assertToolOk(res, name) {
   assert.ok(res.result, `${name} returned no result: ${JSON.stringify(res).slice(0, 300)}`);
@@ -156,18 +184,18 @@ function assertToolOk(res, name) {
     assert.fail(`${name} JSON-RPC error: ${JSON.stringify(res.error)}`);
   }
   const text = (res.result.content ?? []).map((c) => c.text ?? "").join("\n");
-  // Cloudflare rate limit — see Bug #8.
+  // Cloudflare rate limit — see Bug #8. Environmental, not a code defect.
   if (/Cloudflare|cf-ray|rate limit/i.test(text)) {
-    console.error(`(${name}: rate-limited by Cloudflare — Bug #8 detection working as designed; skipping assertions)`);
+    rateLimited.push(name);
+    console.error(`(${name}: rate-limited by Cloudflare — assertions skipped, tallied below)`);
     return "__RATE_LIMITED__";
   }
-  // Schema mismatch — MCP returns these as result.isError=true with the
-  // validation message in content. Tests that fed wrong-shape inputs here
-  // (rather than reflecting a real bug in the tool) should skip rather
-  // than fail the whole suite.
   if (res.result.isError || /^MCP error|Input validation error|Invalid arguments for tool/i.test(text)) {
-    console.error(`(${name}: schema rejection from MCP — test fixture likely needs the current schema; skipping)`);
-    return "__SCHEMA_REJECTED__";
+    assert.fail(
+      `${name}: the MCP rejected these arguments, so this tool was not tested. ` +
+        `The fixture has drifted from the tool's schema — update it to match. ` +
+        `Rejection: ${text.replace(/\s+/g, " ").slice(0, 400)}`,
+    );
   }
   return text;
 }
@@ -183,11 +211,14 @@ test("META · zpl_about (free, no engine) — returns project metadata", async (
 
 test("META · zpl_validate_input (free) — flags errors on malformed input", async () => {
   const text = assertToolOk(await callTool("zpl_validate_input", {
-    values: [1, 2, NaN, 4],
+    // NaN cannot survive JSON.stringify — it serialises to null, which the
+    // schema rejects before the tool ever runs. That is why the old fixture
+    // was silently skipped for months. A negative weight is the malformed
+    // input that can actually be transmitted.
+    values: [1, 2, -5, 4],
     kind: "weights",
   }), "zpl_validate_input");
-  // NaN should be flagged as an error.
-  matchOrSkip(text, /NaN|Infinity|invalid/i);
+  matchOrSkip(text, /negative|non-negative|error/i);
 });
 
 test("META · zpl_quota (cheap, local + reads plan) — returns quota table", async () => {
@@ -353,8 +384,10 @@ test("CORE · zpl_plans (free read) — lists subscription plans", async () => {
 });
 
 test("CORE · zpl_watchlist (local) — returns list or empty", async () => {
-  const text = assertToolOk(await callTool("zpl_watchlist", {}), "zpl_watchlist");
-  assert.ok(text.length > 0);
+  const text = assertToolOk(await callTool("zpl_watchlist", { action: "list" }), "zpl_watchlist");
+  // Was `assert.ok(text.length > 0)`, which the 18-character skip sentinel
+  // satisfied on its own — the assertion could not fail either way.
+  matchOrSkip(text, /watchlist|empty|no items|tracked/i, "zpl_watchlist");
 });
 
 // ADVANCED extras
@@ -401,7 +434,7 @@ test("UNIVERSAL · zpl_balance_check (alias of zpl_decide, ~3 tokens)", async ()
 });
 
 test("UNIVERSAL · zpl_explain (free, no engine) — explains AIN concept", async () => {
-  const text = assertToolOk(await callTool("zpl_explain", { topic: "ain" }), "zpl_explain");
+  const text = assertToolOk(await callTool("zpl_explain", { ain_score: 73.5, context: "game economy" }), "zpl_explain");
   matchOrSkip(text, /AIN|stability|balance/i);
 });
 
@@ -420,10 +453,9 @@ test("FINANCE · zpl_macro (~10 tokens) — analyzes macro indicators", async ()
 
 test("FINANCE · zpl_correlation (~10 tokens) — correlation matrix bias", async () => {
   const text = assertToolOk(await callTool("zpl_correlation", {
-    pairs: [
-      { name: "BTC-ETH",  correlation: 0.85 },
-      { name: "BTC-Gold", correlation: -0.20 },
-      { name: "ETH-SOL",  correlation: 0.75 },
+    assets: [
+      { name: "BTC", returns: [0.02, -0.01, 0.03, 0.00, -0.02] },
+      { name: "ETH", returns: [0.03, -0.02, 0.04, 0.01, -0.01] },
     ],
   }), "zpl_correlation");
   matchOrSkip(text, /AIN/, "zpl_correlation");
@@ -492,10 +524,11 @@ test("CRYPTO · zpl_tokenomics (~10 tokens) — analyzes token distribution", as
 test("CRYPTO · zpl_whale_check (~10 tokens) — analyzes whale concentration", async () => {
   const text = assertToolOk(await callTool("zpl_whale_check", {
     holders: [
-      { name: "Whale 1",   percent: 15 },
-      { name: "Whale 2",   percent: 10 },
-      { name: "Top 100",   percent: 35 },
-      { name: "Retail",    percent: 40 },
+      // the schema field is `percentage`, and the label field is `label`.
+      { label: "Whale 1", percentage: 15 },
+      { label: "Whale 2", percentage: 10 },
+      { label: "Top 100", percentage: 35 },
+      { label: "Retail",  percentage: 40 },
     ],
   }), "zpl_whale_check");
   matchOrSkip(text, /AIN|whale|concentration/i, "zpl_whale_check");
@@ -556,10 +589,11 @@ test("AI/ML · zpl_prompt_test (~10 tokens) — response distribution", async ()
 test("SECURITY · zpl_vuln_map (~10 tokens) — vulnerability distribution", async () => {
   const text = assertToolOk(await callTool("zpl_vuln_map", {
     components: [
-      { name: "auth",     vulnerabilities: 1, severity_avg: 7 },
-      { name: "api",      vulnerabilities: 3, severity_avg: 4 },
-      { name: "frontend", vulnerabilities: 2, severity_avg: 5 },
-      { name: "db",       vulnerabilities: 0, severity_avg: 0 },
+      // the schema asks for a CVSS `score` per component, plus optional `count`.
+      { name: "auth",     score: 7.0, count: 1 },
+      { name: "api",      score: 4.0, count: 3 },
+      { name: "frontend", score: 5.0, count: 2 },
+      { name: "db",       score: 0.0, count: 0 },
     ],
     system_name: "test-app",
   }), "zpl_vuln_map");
@@ -569,9 +603,10 @@ test("SECURITY · zpl_vuln_map (~10 tokens) — vulnerability distribution", asy
 test("SECURITY · zpl_risk_score (~10 tokens) — risk scoring", async () => {
   const text = assertToolOk(await callTool("zpl_risk_score", {
     risks: [
-      { name: "Data breach",    likelihood: 3, impact: 9 },
-      { name: "DDoS",           likelihood: 6, impact: 5 },
-      { name: "Insider threat", likelihood: 2, impact: 7 },
+      // likelihood and impact are both 1-5; the old fixture used a 1-10 scale.
+      { name: "Data breach",    likelihood: 3, impact: 5 },
+      { name: "DDoS",           likelihood: 4, impact: 3 },
+      { name: "Insider threat", likelihood: 2, impact: 4 },
     ],
   }), "zpl_risk_score");
   matchOrSkip(text, /AIN|risk/i, "zpl_risk_score");
@@ -581,10 +616,10 @@ test("SECURITY · zpl_risk_score (~10 tokens) — risk scoring", async () => {
 test("CERTIFICATION · zpl_debate (~5 tokens) — debate side balance", async () => {
   const text = assertToolOk(await callTool("zpl_debate", {
     topic: "Remote work vs office",
-    side_a_arguments: [
-      { strength: 8, content: "Lower commute time" },
-      { strength: 7, content: "Better focus" },
-    ],
+    side_a: "Remote",
+    side_b: "Office",
+    args_a: ["Lower commute time", "Better focus at home"],
+    args_b: ["Easier collaboration", "Clearer separation from home"],
     side_b_arguments: [
       { strength: 6, content: "Team collaboration" },
       { strength: 7, content: "Mentorship" },
@@ -596,12 +631,9 @@ test("CERTIFICATION · zpl_debate (~5 tokens) — debate side balance", async ()
 test("CERTIFICATION · zpl_news_bias (~5 tokens) — article bias sentence-by-sentence", async () => {
   const text = assertToolOk(await callTool("zpl_news_bias", {
     title: "Test Article",
-    sentences: [
-      { text: "The market gained 2% today.",      sentiment: 0.5 },
-      { text: "Experts predict continued growth.", sentiment: 0.6 },
-      { text: "Risks remain in emerging markets.", sentiment: -0.3 },
-      { text: "Overall outlook is positive.",      sentiment: 0.4 },
-    ],
+    // min 50 chars per the schema.
+    text: "The market gained ground today. Experts predict continued growth, "
+      + "though real risks remain in several emerging markets.",
   }), "zpl_news_bias");
   matchOrSkip(text, /AIN|bias|article/i, "zpl_news_bias");
 });
@@ -609,13 +641,10 @@ test("CERTIFICATION · zpl_news_bias (~5 tokens) — article bias sentence-by-se
 test("CERTIFICATION · zpl_review_bias (~5 tokens) — product review distribution", async () => {
   const text = assertToolOk(await callTool("zpl_review_bias", {
     product: "TestProduct",
-    reviews: [
-      { rating: 5, count: 120 },
-      { rating: 4, count: 80 },
-      { rating: 3, count: 30 },
-      { rating: 2, count: 10 },
-      { rating: 1, count: 5 },
-    ],
+    rating: 4,
+    // min 20 chars per the schema.
+    review_text: "Solid build and it arrived quickly, though the battery life "
+      + "is shorter than advertised.",
   }), "zpl_review_bias");
   matchOrSkip(text, /AIN|review|bias/i, "zpl_review_bias");
 });
@@ -634,7 +663,8 @@ test("CORE · zpl_sweep (~30 tokens, multi-bias scan) — returns sweep table", 
 
 test("CORE · zpl_analyze (cheap) — analyzes input shape", async () => {
   const text = assertToolOk(await callTool("zpl_analyze", {
-    input: [10, 20, 30, 40, 50],
+    domain: "finance",
+    input: { assets: [1.2, -0.8, 0.5, -1.1, 0.3] },
   }), "zpl_analyze");
   matchOrSkip(text, /AIN|analyze|input|shape|distribution/i, "zpl_analyze");
 });
@@ -651,4 +681,27 @@ test("UNIVERSAL · zpl_compare (~6 tokens) — multi-criteria comparison", async
     ],
   }), "zpl_compare");
   matchOrSkip(text, /AIN|compare|balance/i, "zpl_compare");
+});
+
+// ------------------------------------------------------------------
+// Coverage tally — declared last so it runs after every call above.
+// ------------------------------------------------------------------
+
+/**
+ * A Cloudflare rate limit is the one skip this suite still tolerates: it is
+ * environmental and says nothing about the code. But tolerating it silently
+ * is how the previous funnel hid eleven untested tools, so the count is now
+ * asserted. If most of the suite was throttled, the run did not verify what
+ * its green summary implies and must not be quoted as if it had.
+ */
+test("COVERAGE · the run was not mostly skipped by rate limiting", () => {
+  assert.ok(
+    rateLimited.length <= 3,
+    `${rateLimited.length} tools were rate-limited, so their assertions never ran: ` +
+      `${rateLimited.join(", ")}. Re-run with more spacing between calls — a pass ` +
+      `here would overstate what was actually checked.`,
+  );
+  if (rateLimited.length > 0) {
+    console.error(`(coverage: ${rateLimited.length} tool(s) skipped for rate limiting: ${rateLimited.join(", ")})`);
+  }
 });
