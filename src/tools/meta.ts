@@ -21,7 +21,12 @@ const PLAN_INFO: Record<string, { price: string; annualPrice: string; maxD: numb
   pro:           { price: "$29/mo",   annualPrice: "$23/mo",   maxD: 25,  tokens: "50,000",     rate: "60/min", keys: 3 },
   gamepro:       { price: "$69/mo",   annualPrice: "$55/mo",   maxD: 32,  tokens: "150,000",    rate: "60/min", keys: 5 },
   studio:        { price: "$149/mo",  annualPrice: "$119/mo",  maxD: 48,  tokens: "500,000",    rate: "60/min", keys: 10 },
-  agent:         { price: "$199/mo",  annualPrice: "$159/mo",  maxD: 48,  tokens: "2,000,000",  rate: "60/min", keys: 15 },
+  // AUDIT 2026-07-30: keys was 15 here while the website grants 50. The site
+  // corrected that value some time ago — its own note calls the mismatch a
+  // refund magnet, since /pricing advertises 50 for Agent at $199/mo — and
+  // this copy was never updated. So an Agent customer asking zpl_quota was
+  // told they get a third of what they pay for.
+  agent:         { price: "$199/mo",  annualPrice: "$159/mo",  maxD: 48,  tokens: "2,000,000",  rate: "60/min", keys: 50 },
   enterprise:    { price: "$499/mo",  annualPrice: "$399/mo",  maxD: 64,  tokens: "10,000,000", rate: "60/min", keys: 25 },
   enterprise_xl: { price: "$999/mo",  annualPrice: "$799/mo",  maxD: 100, tokens: "50,000,000", rate: "60/min", keys: 50 },
 };
@@ -455,11 +460,22 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
       let monthOps = 0;
       let allTimeOps = history.length;
 
+      // AUDIT 2026-07-30: this read `results.totalTokens`, which nothing
+      // writes — every tool persists `tokens_used`, and a search for
+      // `totalTokens:` as a key across src/ returns zero hits. So the
+      // dashboard's monthly total was always 0, and the "remaining" figure
+      // beside it was always the full plan allowance no matter how much had
+      // been spent.
+      //
+      // estimateOpTokens is the shape-aware reader in store.ts: it takes
+      // tokens_used, totalTokens or tokens when present and falls back to a
+      // per-tool estimate otherwise. The sibling summary a few hundred lines
+      // above already used it — this file had two token totals, one correct
+      // and one that could only ever produce zero.
       for (const h of history) {
         if (new Date(h.timestamp) >= monthStart) {
           monthOps++;
-          const results = h.results as Record<string, unknown>;
-          if (typeof results.totalTokens === "number") monthTokens += results.totalTokens;
+          monthTokens += estimateOpTokens(h);
         }
       }
 
@@ -487,14 +503,14 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
       text += `\n### This Month (local estimate — server may differ)\n\n`;
       text += `| Metric | Value |\n|--------|-------|\n`;
       text += `| Operations recorded locally | ${monthOps} |\n`;
-      text += `| Tokens Used (local est.) | ~${monthTokens.toLocaleString()} |\n`;
-      text += `| Tokens Remaining (local est.) | ~${remaining.toLocaleString()} |\n`;
+      text += `| Tokens Used (local est.) | ~${monthTokens.toLocaleString("en-US")} |\n`;
+      text += `| Tokens Remaining (local est.) | ~${remaining.toLocaleString("en-US")} |\n`;
       text += `| Days Until Reset | ${daysLeft} (resets ${monthEnd.toLocaleDateString()}) |\n`;
       text += `| All-time Operations | ${allTimeOps} |\n`;
 
       // Warning
       if (isLow) {
-        text += `\n**WARNING: Low token budget (by local estimate)!** Only ~${remaining.toLocaleString()} tokens remaining according to local history — confirm on the dashboard before acting on it.\n`;
+        text += `\n**WARNING: Low token budget (by local estimate)!** Only ~${remaining.toLocaleString("en-US")} tokens remaining according to local history — confirm on the dashboard before acting on it.\n`;
         text += `**Options:**\n`;
         text += `- Upgrade plan: https://zeropointlogic.io/pricing\n`;
         text += `- Buy token pack (one-time, never expire): https://zeropointlogic.io/dashboard/billing\n`;
