@@ -25,6 +25,24 @@ async function tsFiles(dir) {
   return out;
 }
 
+
+/**
+ * AUDIT 2026-07-30: every guard below walks src/ and asserts that the list
+ * of offending lines is empty. If src/ were renamed, moved, or partially
+ * checked out, that list would be empty because nothing was read — and all
+ * of them would report green while checking nothing at all.
+ *
+ * A test that cannot fail is worse than no test, because someone leans on
+ * it. This one fails first and says why.
+ */
+test("the source tree is actually being read", async () => {
+  const files = await tsFiles(SRC);
+  assert.ok(
+    files.length > 0,
+    `no source files found under ${SRC} — every guard below would pass vacuously`,
+  );
+});
+
 test("ainScale keeps the decimals, fmtAin renders two of them", async () => {
   const { ainScale, fmtAin, ainPct } = await import(
     new URL("../dist/ain-format.js", import.meta.url).href
