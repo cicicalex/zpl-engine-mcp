@@ -4,11 +4,11 @@ Model Context Protocol (MCP) server for the **Zero Point Logic Engine** — a po
 
 Connects any MCP-compatible AI client (Claude Desktop, Claude Code, Cursor, Windsurf, etc.) to the ZPL Engine API for real-time bias detection, stability scoring, and neutrality analysis across multiple domains.
 
-**68 tools** (64 unique + 4 backwards-compat aliases) across 11 categories: Core, Finance, Gaming, AI/ML, Security, Crypto, Certification, Advanced, Universal, Meta, and AI Eval.
+**69 tools** (65 unique + 4 backwards-compat aliases) across 11 categories: Core, Finance, Gaming, AI/ML, Security, Crypto, Certification, Advanced, Universal, Meta, and AI Eval.
 
 ## What's new in v4.0.0 (MAJOR RELEASE)
 
-Two months of incremental work consolidated. **21 bugs fixed**, **146 tests** (98 unit + 48 live MCP integration), **Windows + Linux verified**. Backwards compatible — legacy `zpl_u_<48hex>` keys still work, all 68 tools keep the same input shape.
+Two months of incremental work consolidated. **21 bugs fixed**, **146 tests** (98 unit + 48 live MCP integration), **Windows + Linux verified**. Backwards compatible — legacy `zpl_u_<48hex>` keys still work, all 69 tools keep the same input shape.
 
 ### New commands
 - **`npx zpl-engine-mcp setup`** — now memory-aware. Detects existing config and offers keep / re-setup / patch-only instead of forcing a fresh login. `--force` bypasses.
@@ -206,7 +206,7 @@ npm run build
 
 Add to your MCP configuration following the respective IDE's documentation, with the same command/args/env structure.
 
-## Tool Categories (67 tools)
+## Tool Categories (69 tools)
 
 Unique tool names: 63. With 4 backwards-compat aliases (`zpl_balance_*` pairs) the registered total is 67.
 

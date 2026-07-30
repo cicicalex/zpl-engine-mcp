@@ -87,3 +87,80 @@ test("no hardcoded tool count in the server description or zpl_about", async () 
     );
   }
 });
+
+/**
+ * Every published surface must state the count the code actually registers.
+ *
+ * AUDIT 2026-07-30: the guard above compares src/tool-count.ts against the
+ * real registrations, which is the important half — but nothing checked the
+ * places a reader actually sees. Adding one tool left four different numbers
+ * in circulation at once:
+ *
+ *   src/tool-count.ts   69   (correct, recounted by the test above)
+ *   README.md           68 ... and 67, two sections apart in the same file
+ *   package.json        68   (the npm listing)
+ *   server.json         68   (the MCP registry listing)
+ *
+ * So the npm page advertised one number, the registry another, and the README
+ * disagreed with itself. None of them was what the server registers.
+ */
+test("README, package.json and server.json state the registered count", async () => {
+  const { REGISTERED_TOOL_COUNT, UNIQUE_TOOL_COUNT } = await import(
+    new URL("../dist/tool-count.js", import.meta.url).href
+  );
+
+  // Only phrasings that state the TOTAL. The first version matched every
+  // "<number> tools" and immediately flagged a changelog line reading
+  // "22 tools now persist real tokens_used" — a true statement about how many
+  // tools were changed in a release, not a claim about how many exist. A guard
+  // that cries wolf on correct prose gets switched off, so it is narrowed to
+  // the three shapes actually used to announce the total.
+  const TOTAL_CLAIM = [
+    /\*\*(\d{2,3})\s+tools\*\*/g, // README headline: **69 tools**
+    /(\d{2,3})\s+tools\s+across/g, // package.json / server.json / README
+    /Tool Categories\s*\((\d{2,3})\s+tools\)/g, // README section heading
+    /all\s+(\d{2,3})\s+tools\b/g, // README prose: "all 69 tools keep..."
+  ];
+
+  const surfaces = ["README.md", "package.json", "server.json"];
+  const wrong = [];
+
+  for (const name of surfaces) {
+    const text = await readFile(join(ROOT, name), "utf-8");
+    for (const pattern of TOTAL_CLAIM) {
+      for (const m of text.matchAll(pattern)) {
+        if (Number(m[1]) !== REGISTERED_TOOL_COUNT) {
+          wrong.push(`${name}: says "${m[1]} tools", code registers ${REGISTERED_TOOL_COUNT}`);
+        }
+      }
+    }
+    for (const m of text.matchAll(/(\d{2,3})\s+unique\b/g)) {
+      if (Number(m[1]) !== UNIQUE_TOOL_COUNT) {
+        wrong.push(`${name}: says "${m[1]} unique", code has ${UNIQUE_TOOL_COUNT}`);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    wrong,
+    [],
+    `published surfaces disagree with the code about how many tools exist:\n${wrong.join("\n")}`,
+  );
+});
+
+test("the surfaces actually make a claim to check", async () => {
+  // Without this, deleting every mention would leave the guard above green
+  // while the README said nothing at all.
+  let claims = 0;
+  for (const name of ["README.md", "package.json", "server.json"]) {
+    const text = await readFile(join(ROOT, name), "utf-8");
+    claims += [...text.matchAll(/\*\*\d{2,3}\s+tools\*\*/g)].length;
+    claims += [...text.matchAll(/\d{2,3}\s+tools\s+across/g)].length;
+  }
+  assert.ok(
+    claims >= 3,
+    `only ${claims} total-count claims found across the three files — either the ` +
+      `wording changed or the counts were removed, and the guard above would ` +
+      `pass while checking almost nothing`,
+  );
+});
