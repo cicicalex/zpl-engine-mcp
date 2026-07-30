@@ -52,6 +52,34 @@ export interface SweepResult {
   status: string;
 }
 
+/** One operator family's verdict on a supplied matrix. */
+export interface FamilyVerdict {
+  family: number;
+  bit: 0 | 1;
+  /**
+   * The fold reached an exact tie and the centre decided it. A tie means no
+   * majority was found at all — weaker than a confident bit, and worth saying
+   * out loud rather than presenting as a settled answer.
+   */
+  tie_broken: boolean;
+}
+
+/**
+ * Result of analysing one specific matrix.
+ *
+ * Carries no `ain` and no `p_output`, and not by omission: both describe how
+ * output bits distribute across many sampled matrices, and over a single
+ * matrix the proportion is 0 or 1 and says nothing about balance.
+ */
+export interface AnalyzeResponse {
+  n: number;
+  families: FamilyVerdict[];
+  ones: number;
+  unanimous: boolean;
+  tokens_used: number;
+  compute_ms?: number;
+}
+
 export interface SweepResponse {
   d: number;
   samples: number;
@@ -283,6 +311,38 @@ export class ZPLEngineClient {
       }
 
       return res.json() as Promise<ComputeResponse>;
+    }, 15000);
+  }
+
+  /**
+   * Analyse a specific matrix — the engine sees the caller's data.
+   *
+   * `compute` does not send a matrix. It sends a dimension and a density, and
+   * the engine generates fresh random matrices at that density and reports on
+   * those. Two entirely different inputs of equal density therefore receive
+   * the same answer, which is why domain tools built on `compute` cannot
+   * distinguish a fair distribution from an abusive one.
+   *
+   * This sends the matrix itself and returns each operator family's verdict.
+   */
+  async analyze(matrix: number[][]): Promise<AnalyzeResponse> {
+    if (!checkRateLimit()) {
+      throw new Error(`Rate limit exceeded (${RATE_LIMIT_PER_MIN}/min). Wait a moment and try again.`);
+    }
+    return this.withRetry(async () => {
+      const res = await fetch(`${this.baseUrl}/analyze`, {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({ matrix }),
+        redirect: "error",
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!res.ok) {
+        throw new Error(await parseEngineError(res));
+      }
+
+      return res.json() as Promise<AnalyzeResponse>;
     }, 15000);
   }
 

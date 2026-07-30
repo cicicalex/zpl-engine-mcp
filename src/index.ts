@@ -28,7 +28,7 @@ import { loadApiKey } from "./config.js";
 import { getValidatedEngineBaseUrl } from "./engine-url.js";
 import { getMcpPackageVersion } from "./package-meta.js";
 import { ainScale, fmtAin, ainPct } from "./ain-format.js";
-import { equilibriumOffset } from "./tools/helpers.js";
+import { equilibriumOffset, ZPL_DISCLAIMER } from "./tools/helpers.js";
 import { TOOL_COUNT_PHRASE } from "./tool-count.js";
 // API key format validation extracted to api-key-format.ts for unit testing.
 // v3.7.2: Accepts wizard-issued keys with type prefixes (zpl_u_mcp_, zpl_u_cli_,
@@ -200,6 +200,53 @@ server.tool(
       }
 
       text += `\n*Total tokens used: ${result.total_tokens}*`;
+
+      return { content: [{ type: "text" as const, text }] };
+    } catch (err) {
+      return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool: zpl_matrix — run the method over a matrix the caller supplies
+// ---------------------------------------------------------------------------
+
+server.tool(
+  "zpl_matrix",
+  "Analyse a SPECIFIC binary matrix you provide (NxN, cells 0 or 1, 3<=N<=100). " +
+    "Unlike zpl_compute, which takes a dimension and a density and reports on random " +
+    "matrices the engine generates, this runs the method over YOUR data and returns what " +
+    "each of the four operator families concluded, plus how far they agree. " +
+    "Returns no AIN: one matrix is a single observation, so a proportion over it is 0 or 1 " +
+    "and would say nothing about balance.",
+  {
+    matrix: z
+      .array(z.array(z.number().int().min(0).max(1)))
+      .min(3)
+      .max(100)
+      .describe("Square binary matrix, 3x3 to 100x100. Rows of 0s and 1s."),
+    label: z.string().max(120).optional().describe("Optional name for this matrix, shown in the output"),
+  },
+  async ({ matrix, label }) => {
+    try {
+      const client = getClient();
+      const result = await client.analyze(matrix);
+
+      const agreement = result.unanimous
+        ? `unanimous — all ${result.families.length} families agree`
+        : `split — ${result.ones} of ${result.families.length} returned 1`;
+
+      let text = `## ${label ?? "Matrix"} — ${result.n}x${result.n}\n\n`;
+      text += `**Agreement:** ${agreement}\n\n`;
+      text += `| Family | Bit | Tie-broken |\n|--------|-----|------------|\n`;
+      for (const f of result.families) {
+        // A tie means the fold found no majority and the centre decided it.
+        // Saying so matters: it is a weaker claim than a confident bit.
+        text += `| ${f.family} | ${f.bit} | ${f.tie_broken ? "yes — no majority, centre decided" : "no"} |\n`;
+      }
+      text += `\n*Tokens used: ${result.tokens_used}*\n`;
+      text += `\n${ZPL_DISCLAIMER}\n`;
 
       return { content: [{ type: "text" as const, text }] };
     } catch (err) {

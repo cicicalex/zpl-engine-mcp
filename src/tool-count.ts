@@ -12,7 +12,7 @@
  */
 
 /** Tools actually registered on the MCP server (includes the aliases). */
-export const REGISTERED_TOOL_COUNT = 68;
+export const REGISTERED_TOOL_COUNT = 69;
 
 /** Backwards-compat aliases that reuse another tool's handler. */
 export const ALIAS_TOOL_COUNT = 4;
