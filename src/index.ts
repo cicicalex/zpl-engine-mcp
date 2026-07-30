@@ -28,7 +28,7 @@ import { loadApiKey } from "./config.js";
 import { getValidatedEngineBaseUrl } from "./engine-url.js";
 import { getMcpPackageVersion } from "./package-meta.js";
 import { ainScale, fmtAin, ainPct } from "./ain-format.js";
-import { equilibriumOffset, ZPL_DISCLAIMER } from "./tools/helpers.js";
+import { equilibriumOffset, ZPL_DISCLAIMER, tokenCostTable } from "./tools/helpers.js";
 import { TOOL_COUNT_PHRASE } from "./tool-count.js";
 // API key format validation extracted to api-key-format.ts for unit testing.
 // v3.7.2: Accepts wizard-issued keys with type prefixes (zpl_u_mcp_, zpl_u_cli_,
@@ -401,8 +401,14 @@ server.tool(
         text += `| ${p.name} | $${p.price_usd}/mo | ${p.max_d} | ${p.tokens_per_month.toLocaleString()} | ${p.max_keys} |\n`;
       }
 
-      text += `\nToken cost per compute: **d\u00B2 + d** (e.g., d=9 costs 90 tokens)\n`;
-      text += `Sweeps cost 19x (19 bias steps).\n`;
+      // AUDIT 2026-07-31: this line read "Token cost per compute: d\u00B2 + d
+      // (e.g., d=9 costs 90 tokens)". Nothing charges d\u00B2+d \u2014 not the engine,
+      // not the website, not this package's own helper. A d=9 call costs 2.
+      // Printed from getTokenCost now, so the quoted prices are the charged
+      // ones by construction.
+      text += `\n**Token cost per compute** \u2014 step bands, not a formula:\n\n`;
+      text += `${tokenCostTable()}\n`;
+      text += `\nA sweep runs 19 bias steps and costs 19x one compute at the same d.\n`;
       text += `\nGet your key at https://zeropointlogic.io/pricing`;
 
       return { content: [{ type: "text" as const, text }] };

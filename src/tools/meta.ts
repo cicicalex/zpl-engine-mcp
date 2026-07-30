@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import type { Server } from "./helpers.js";
-import { clampD, ainSignal } from "./helpers.js";
+import { clampD, ainSignal, getTokenCost } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { resolveZplApiKey } from "../env-keys.js";
 import { loadPlan } from "../config.js";
@@ -31,17 +31,11 @@ const PLAN_INFO: Record<string, { price: string; annualPrice: string; maxD: numb
   enterprise_xl: { price: "$999/mo",  annualPrice: "$799/mo",  maxD: 100, tokens: "50,000,000", rate: "60/min", keys: 50 },
 };
 
-/** Token cost per dimension — MUST match getTokenCost() on ZPL Main website */
-function getTokenCost(d: number): number {
-  if (d <= 5) return 1;
-  if (d <= 9) return 2;
-  if (d <= 16) return 5;
-  if (d <= 25) return 15;
-  if (d <= 32) return 40;
-  if (d <= 48) return 150;
-  if (d <= 64) return 500;
-  return 2000;
-}
+// Token cost per dimension now lives in tools/helpers.ts — one copy for the
+// whole package. The comment that used to sit here said it "MUST match
+// getTokenCost() on ZPL Main website", which was true and observed, while a
+// third statement in zpl_plans quietly claimed d²+d. A rule enforced by a
+// comment holds exactly as long as everyone reads the comment.
 
 export function registerMetaTools(server: Server, getClient: () => ZPLEngineClient) {
 

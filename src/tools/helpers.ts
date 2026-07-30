@@ -450,3 +450,60 @@ export function concentrationBias(shares: number[]): number {
 export function clampD(n: number): number {
   return Math.max(3, Math.min(100, Math.round(n)));
 }
+
+/* -------------------------------------------------------------------------- */
+/*  What a call costs                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Tokens deducted for one compute at dimension `d`.
+ *
+ * This mirrors `token_cost` in the engine's zpl-core, which is the code that
+ * actually decrements the balance for API-key traffic, and `getTokenCost` in
+ * the website's lib/constants.ts, which does the same for session traffic.
+ * All three are step bands, not a formula.
+ *
+ * AUDIT 2026-07-31: it lived in three places inside this package alone — this
+ * table (in tools/meta.ts), and a *different, invented* rule printed by
+ * zpl_plans reading "Token cost per compute: d² + d (e.g., d=9 costs 90
+ * tokens)". Nothing charges d²+d. A d=9 call costs 2. The tool whose whole
+ * job is to say what things cost was overstating the price 45-fold, which on
+ * the Free plan's 5,000 tokens is the difference between 55 calls a month and
+ * 2,500.
+ *
+ * Kept here, in the module both other call sites already import, so the copies
+ * cannot drift again.
+ */
+export function getTokenCost(d: number): number {
+  if (d <= 5) return 1;
+  if (d <= 9) return 2;
+  if (d <= 16) return 5;
+  if (d <= 25) return 15;
+  if (d <= 32) return 40;
+  if (d <= 48) return 150;
+  if (d <= 64) return 500;
+  return 2000;
+}
+
+/** The bands as published, derived from the function rather than retyped. */
+export const TOKEN_COST_BANDS: ReadonlyArray<{ from: number; to: number | null }> = [
+  { from: 3, to: 5 },
+  { from: 6, to: 9 },
+  { from: 10, to: 16 },
+  { from: 17, to: 25 },
+  { from: 26, to: 32 },
+  { from: 33, to: 48 },
+  { from: 49, to: 64 },
+  { from: 65, to: null },
+];
+
+/**
+ * One line per band, e.g. "d=6–9 → 2 tokens". Costs come from getTokenCost, so
+ * a change to the bands cannot leave the printed prices behind.
+ */
+export function tokenCostTable(): string {
+  return TOKEN_COST_BANDS.map(({ from, to }) => {
+    const range = to === null ? `d=${from}+` : from === to ? `d=${from}` : `d=${from}–${to}`;
+    return `${range} → ${getTokenCost(to ?? from)} tokens`;
+  }).join("\n");
+}
