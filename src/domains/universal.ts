@@ -15,6 +15,7 @@
 import type { ComputeResponse } from "../engine-client.js";
 import type { DomainLens, DomainInterpretation } from "./types.js";
 import { ainScale, fmtAin } from "../ain-format.js";
+import { clampBias } from "../tools/helpers.js";
 
 /**
  * Given an array of factor scores (0-10) for one option,
@@ -24,6 +25,26 @@ import { ainScale, fmtAin } from "../ain-format.js";
  * Imbalanced = some factors way higher than others = high bias = low AIN
  */
 function computeOptionBias(scores: number[]): { d: number; bias: number } {
+  // AUDIT 2026-07-30: reached from zpl_analyze, whose `input` is typed
+  // `z.record(z.string(), z.unknown())` — nothing has checked these values
+  // before they arrive. A non-numeric entry used to divide into NaN and take
+  // the whole computation with it; a `null` entry was quietly read as a score
+  // of zero and produced a confident answer from an input nobody supplied.
+  // The five other lenses each reject short input at their own boundary. This
+  // one, the flagship, had no such check.
+  if (!Array.isArray(scores) || scores.length === 0) {
+    throw new Error(
+      "Each option needs at least one factor score. Received an empty list.",
+    );
+  }
+  const bad = scores.findIndex((s) => typeof s !== "number" || !Number.isFinite(s));
+  if (bad !== -1) {
+    throw new Error(
+      `Factor score at position ${bad} is not a finite number ` +
+        `(received ${JSON.stringify(scores[bad])}). Scores are numbers from 0 to 10.`,
+    );
+  }
+
   const d = Math.max(3, Math.min(100, scores.length));
 
   // Normalize to 0-1
@@ -43,7 +64,7 @@ function computeOptionBias(scores: number[]): { d: number; bias: number } {
   // High overall + imbalanced = strong but biased
 
   // Bias = imbalance weighted more, overall level weighted less
-  const bias = Math.min(1, Math.max(0, imbalance * 0.7 + (1 - mean) * 0.3));
+  const bias = clampBias(imbalance * 0.7 + (1 - mean) * 0.3, "computeOptionBias");
 
   return { d, bias };
 }

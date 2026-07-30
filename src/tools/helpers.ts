@@ -102,6 +102,37 @@ export function formatResult(label: string, result: ComputeResponse, extras?: Re
   return text;
 }
 
+/**
+ * Final clamp for every bias helper below.
+ *
+ * AUDIT 2026-07-30: each of these ended in `Math.min(1, Math.max(0, x))`,
+ * which looks like it bounds the result but does not catch NaN — both
+ * Math.min and Math.max propagate it. Every route to NaN is reachable:
+ * an empty array divides by zero in the mean, a single share makes
+ * concentrationBias compute 0/0, and `zpl_analyze` accepts its input as
+ * `z.record(z.string(), z.unknown())`, so a non-numeric score arrives
+ * unchallenged and turns the whole chain into NaN.
+ *
+ * The result was not a visible failure. `JSON.stringify({bias: NaN})`
+ * produces `{"bias":null}`, so the engine received a request the numeric
+ * contract has no meaning for, and the user was billed for it.
+ *
+ * Throwing is deliberate. A bias that could not be computed is not a bias
+ * of zero or a half — those are real answers, and returning one would make
+ * a meaningless input indistinguishable from a genuine measurement. The
+ * caller gets a sentence naming which helper failed instead.
+ */
+export function clampBias(value: number, what: string): number {
+  if (!Number.isFinite(value)) {
+    throw new Error(
+      `${what}: bias could not be computed from the input provided ` +
+        `(got ${value}). Check that every score is a finite number and ` +
+        `that the list is not empty.`,
+    );
+  }
+  return Math.min(1, Math.max(0, value));
+}
+
 /** Compute bias from an array of values (how far from uniform) */
 export function distributionBias(values: number[]): number {
   const total = values.reduce((s, v) => s + Math.abs(v), 0);
@@ -110,7 +141,7 @@ export function distributionBias(values: number[]): number {
   const norm = values.map((v) => Math.abs(v) / total);
   const uniform = 1 / n;
   const deviation = norm.reduce((s, p) => s + Math.abs(p - uniform), 0) / 2;
-  return Math.min(1, Math.max(0, deviation));
+  return clampBias(deviation, "distributionBias");
 }
 
 /** Compute bias from directional imbalance (positive vs negative) */
@@ -120,7 +151,7 @@ export function directionalBias(values: number[]): number {
   const dirBias = Math.abs(ratio - 0.5) * 2;
   const avgMag = values.reduce((s, v) => s + Math.abs(v), 0) / values.length;
   const magFactor = Math.min(avgMag / 10, 1);
-  return Math.min(1, Math.max(0, dirBias * 0.6 + magFactor * 0.4));
+  return clampBias(dirBias * 0.6 + magFactor * 0.4, "directionalBias");
 }
 
 /** Compute bias from variance of normalized scores */
@@ -130,7 +161,7 @@ export function varianceBias(scores: number[], scaleMax = 10): number {
   const mean = norm.reduce((s, v) => s + v, 0) / norm.length;
   const variance = norm.reduce((s, v) => s + (v - mean) ** 2, 0) / norm.length;
   const severity = mean;
-  return Math.min(1, Math.max(0, Math.sqrt(variance) * 0.5 + severity * 0.5));
+  return clampBias(Math.sqrt(variance) * 0.5 + severity * 0.5, "varianceBias");
 }
 
 /** HHI concentration index as bias */
@@ -140,7 +171,10 @@ export function concentrationBias(shares: number[]): number {
   const norm = shares.map((v) => v / total);
   const hhi = norm.reduce((s, p) => s + p * p, 0);
   const minHHI = 1 / shares.length;
-  return Math.min(1, Math.max(0, (hhi - minHHI) / (1 - minHHI)));
+  // A single share makes minHHI 1 and the expression below 0/0. There is no
+  // meaningful concentration reading for one holding, so say so rather than
+  // let NaN travel.
+  return clampBias((hhi - minHHI) / (1 - minHHI), "concentrationBias");
 }
 
 /** Clamp dimension to valid range */
