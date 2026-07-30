@@ -79,17 +79,53 @@ export const ZPL_DISCLAIMER =
   "financial, gambling, medical, or legal advice._";
 
 /**
+ * Signed distance of the output balance from the 0.500 equilibrium point.
+ *
+ * AUDIT 2026-07-30: AIN is defined with an absolute value in it, so it cannot
+ * say which side of equilibrium a result sits on — p_output 0.4687 and 0.5313
+ * both come back as AIN 93.73. For a method whose purpose is finding a stable
+ * centre, which way it leans is half the answer, and that half was being
+ * discarded before anything reached the screen.
+ *
+ * Negative leans toward 0, positive toward 1.
+ */
+export function equilibriumOffset(pOutput: number): string {
+  const delta = pOutput - 0.5;
+  const sign = delta > 0 ? "+" : delta < 0 ? "−" : "±";
+  const lean =
+    Math.abs(delta) < 5e-7 ? "dead centre" : delta > 0 ? "leans toward 1" : "leans toward 0";
+  return `${sign}${Math.abs(delta).toFixed(6)} (${lean})`;
+}
+
+/**
  * Format a single compute result as markdown.
- * IP protection: shows AIN score + status only. No bias, no deviation,
- * no p_output, no dimension, no compute time — anything that could hint at
- * the engine's internal method is stripped.
+ *
+ * AUDIT 2026-07-30: this used to strip p_output and deviation under an "IP
+ * protection" note. That protection was not protecting anything — the engine's
+ * own HTTP response struct serialises both to every caller holding an API key,
+ * so they have always been public. Stripping them here hid them from exactly
+ * one audience: whoever reads the MCP output, which is the owner. Customers
+ * got them in raw JSON the whole time.
+ *
+ * What is secret is the method, and none of it is recoverable from a single
+ * output coefficient. That is the owner's stated policy: the calculation stays
+ * secret, the numbers it produces do not.
+ *
+ * p_output is the measurement the engine actually makes — output balance,
+ * where 0.500 is equilibrium. AIN is a derived summary of it; it is kept, but
+ * it no longer stands in for the number it summarises.
  *
  * Always appends ZPL_DISCLAIMER so downstream AIs do not over-interpret the score.
  */
 export function formatResult(label: string, result: ComputeResponse, extras?: Record<string, string | number>): string {
   const ain = ainScale(result.ain);
-  let text = `## ${label} — AIN ${fmtAin(ain)}/100 (${ainSignal(ain)})\n\n`;
+  const p = typeof result.p_output === "number" ? result.p_output : null;
+  let text = `## ${label} — p_output ${p !== null ? p.toFixed(6) : "n/a"} · AIN ${fmtAin(ain)}/100 (${ainSignal(ain)})\n\n`;
   text += `| Metric | Value |\n|--------|-------|\n`;
+  if (p !== null) {
+    text += `| Output balance (p_output) | ${p.toFixed(6)} |\n`;
+    text += `| Distance from 0.500 | ${equilibriumOffset(p)} |\n`;
+  }
   text += `| AIN Score | ${fmtAin(ain)}/100 |\n`;
   text += `| Status | ${result.ain_status} |\n`;
   if (extras) {

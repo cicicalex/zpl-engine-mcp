@@ -28,6 +28,7 @@ import { loadApiKey } from "./config.js";
 import { getValidatedEngineBaseUrl } from "./engine-url.js";
 import { getMcpPackageVersion } from "./package-meta.js";
 import { ainScale, fmtAin, ainPct } from "./ain-format.js";
+import { equilibriumOffset } from "./tools/helpers.js";
 import { TOOL_COUNT_PHRASE } from "./tool-count.js";
 // API key format validation extracted to api-key-format.ts for unit testing.
 // v3.7.2: Accepts wizard-issued keys with type prefixes (zpl_u_mcp_, zpl_u_cli_,
@@ -139,10 +140,19 @@ server.tool(
       const result = await client.compute({ d, bias, samples });
 
       const ain = ainScale(result.ain);
-      // IP protection: expose AIN score + status only. No p_output, no deviation,
-      // no intermediate values. Tokens shown separately so user knows usage.
+      // AUDIT 2026-07-30: p_output was withheld here as "IP protection". It
+      // was not protecting anything — the engine's HTTP response carries
+      // p_output and deviation to every API caller, so the only person it was
+      // hidden from was whoever reads this output. The method is what stays
+      // secret, and a single output coefficient does not reveal it.
+      //
+      // p_output is the engine's actual measurement: output balance, 0.500
+      // being equilibrium. It leads, because it is what the reading means.
       const text = [
         `## ZPL Engine Result`,
+        ``,
+        `**Output balance (p_output):** ${result.p_output.toFixed(6)}`,
+        `**Distance from 0.500:** ${equilibriumOffset(result.p_output)}`,
         ``,
         `**AIN Score:** ${fmtAin(ain)}/100`,
         `**AIN Status:** ${result.ain_status}`,
@@ -173,13 +183,20 @@ server.tool(
       const client = getClient();
       const result = await client.sweep(d, samples);
 
-      // IP protection: expose AIN score + status only per step. No p_output, no deviation.
+      // AUDIT 2026-07-30: see zpl_compute above — p_output was withheld under
+      // an "IP protection" note that protected nothing, since the HTTP
+      // response carries it to every caller regardless. A sweep is where it
+      // matters most: it shows where the output balance crosses 0.500, which
+      // is the whole point of running one.
       let text = `## ZPL Sweep (d=${result.d})\n\n`;
-      text += `| Bias | AIN | Stability |\n`;
-      text += `|------|-----|--------|\n`;
+      text += `| Bias | p_output | From 0.500 | AIN | Stability |\n`;
+      text += `|------|----------|------------|-----|--------|\n`;
 
       for (const r of result.results) {
-        text += `| ${r.bias.toFixed(2)} | ${ainPct(r.ain)}% | ${r.status} |\n`;
+        const p = typeof r.p_output === "number" ? r.p_output : null;
+        text += `| ${r.bias.toFixed(2)} | ${p !== null ? p.toFixed(6) : "n/a"} `
+          + `| ${p !== null ? equilibriumOffset(p) : "n/a"} `
+          + `| ${ainPct(r.ain)}% | ${r.status} |\n`;
       }
 
       text += `\n*Total tokens used: ${result.total_tokens}*`;
