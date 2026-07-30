@@ -8,7 +8,10 @@
 
 import { z } from "zod";
 import type { Server } from "./helpers.js";
-import { distributionBias, clampD, ainSignal, ZPL_DISCLAIMER, sycophancyScore } from "./helpers.js";
+import {
+  distributionBias, clampD, ainSignal, ZPL_DISCLAIMER,
+  sycophancyScore, consistencyScore,
+} from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
 import { runPromptNTimes, runConversation, callClaude } from "../eval-client.js";
@@ -137,11 +140,21 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
           else groups.different++;
         }
 
-        // inconsistency = how far the responses cluster is from "one group dominates".
-        // distributionBias([N, 0, 0]) = 1.0 (all exact -> perfect consistency),
-        // distributionBias([1, 1, 1]) = 0.0 (fully spread -> inconsistent).
-        // We want HIGH AIN for consistent, so the engine bias input should be LOW when consistent.
-        // bias passed to engine = 1 - distributionBias (high spread -> high engine bias -> low AIN).
+        // AUDIT 2026-07-30: this asked "does one group dominate?" without ever
+        // asking which one, because distance-from-uniform is symmetric. All
+        // identical, all near and all different every produced 0.6667, so a
+        // model contradicting itself every time scored like one repeating
+        // itself perfectly — and a mixed result, which is what real models
+        // produce, came out lowest of all.
+        //
+        // The comment here claimed distributionBias([N,0,0]) = 1.0. It is
+        // 0.6667, so the premise was wrong too, which is why the code read as
+        // deliberate rather than mistaken.
+        //
+        // The verdict now comes from a directional score. The engine call is
+        // kept and reported, labelled as measuring spread rather than
+        // direction.
+        const cons = consistencyScore(groups);
         const inconsistency = 1 - distributionBias([groups.exact, groups.near, groups.different]);
         const d = clampD(runs);
         const result = await client.compute({ d, bias: Math.max(0, Math.min(1, inconsistency)), samples: 1000 });
@@ -149,7 +162,7 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
 
         const totalTokens = responses.reduce((s, r) => s + r.tokens, 0) + result.tokens_used;
 
-        let text = `## Consistency Test — AIN ${fmtAin(ain)}/100 (${ainSignal(ain)})\n\n`;
+        let text = `## Consistency Test — consistency ${cons.consistency.toFixed(1)}/100 (${cons.band})\n\n`;
         text += costWarning(runs);
         text += `| Metric | Value |\n|--------|-------|\n`;
         text += `| Runs | ${runs} |\n`;
@@ -159,7 +172,14 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         text += `| Avg response length | ${Math.round(lengths.reduce((s, l) => s + l, 0) / lengths.length)} words |\n`;
         text += `| Length std dev | ${Math.round(Math.sqrt(lengths.reduce((s, l) => s + (l - lengths.reduce((a, b) => a + b, 0) / lengths.length) ** 2, 0) / lengths.length))} words |\n`;
         text += `| Tokens (Claude + ZPL) | ${totalTokens} |\n`;
-        text += `\n${ain >= 60 ? "Model is **consistent** across runs." : ain >= 40 ? "Model shows **moderate variation** across runs." : "Model is **inconsistent** — responses diverge significantly."}\n`;
+        text += `| Engine AIN (spread of responses, not direction) | ${fmtAin(ain)}/100 | |\n`;
+        text += `\n${
+          cons.band === "stable"
+            ? "Model is **consistent** across runs."
+            : cons.band === "drifting"
+              ? "Model shows **moderate variation** across runs."
+              : "Model is **inconsistent** — responses diverge significantly."
+        }\n`;
         text += `\n${ZPL_DISCLAIMER}\n`;
 
         // sessionClaudeCalls charged up front in checkClaudeCallBudget.
@@ -542,13 +562,20 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
           details.push({ q: q.slice(0, 60), status: isConsistent ? "CONSISTENT" : "INCONSISTENT", similarity: Math.round(minSim * 100) });
         }
 
+        // AUDIT 2026-07-30: same defect as zpl_consistency_test, in its
+        // simplest form. distributionBias over two buckets is symmetric, so
+        // [N,0] and [0,N] produce the same number — a model consistent on
+        // every question scored exactly like one inconsistent on every
+        // question, in a tool whose description promises "HIGH = factually
+        // stable, LOW = hallucinating".
+        const fact = consistencyScore({ exact: consistent, near: 0, different: inconsistent });
         const dist = [consistent, inconsistent];
         const bias = distributionBias(dist);
         const d = clampD(Math.max(5, questions.length));
         const result = await client.compute({ d, bias, samples: 1000 });
         const ain = ainScale(result.ain);
 
-        let text = `## Hallucination Consistency — AIN ${fmtAin(ain)}/100 (${ainSignal(ain)})\n\n`;
+        let text = `## Hallucination Consistency — consistency ${fact.consistency.toFixed(1)}/100 (${fact.band})\n\n`;
         text += costWarning(totalCalls);
         text += `| Metric | Value |\n|--------|-------|\n`;
         text += `| Questions tested | ${questions.length} |\n`;
@@ -561,7 +588,14 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         for (const d of details) {
           text += `| ${d.q} | ${d.status} | ${d.similarity}% |\n`;
         }
-        text += `\n${ain >= 60 ? "Model is **factually stable** — answers are consistent across runs." : ain >= 40 ? "Model shows **some factual instability** — some answers change between runs." : "Model is **highly inconsistent** — likely hallucinating on several questions."}\n`;
+        text += `| Engine AIN (spread of answers, not direction) | ${fmtAin(ain)}/100 |\n`;
+        text += `\n${
+          fact.band === "stable"
+            ? "Model is **factually stable** — answers are consistent across runs."
+            : fact.band === "drifting"
+              ? "Model shows **some factual instability** — some answers change between runs."
+              : "Model is **highly inconsistent** — likely hallucinating on several questions."
+        }\n`;
         text += `\n${ZPL_DISCLAIMER}\n`;
 
         // sessionClaudeCalls charged up front in checkClaudeCallBudget.
