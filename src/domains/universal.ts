@@ -102,8 +102,10 @@ export const universalLens: DomainLens = {
   },
 
   buildParams(input: Record<string, unknown>): { d: number; bias: number; samples?: number } {
-    // For universal, we compute per-option. This returns params for the FIRST option.
-    // The actual zpl_ask tool handles multi-option by calling compute multiple times.
+    // Scores are per-option; this returns params for the FIRST option only.
+    // Multi-option comparison lives in zpl_decide / zpl_compare / zpl_rank,
+    // which call compute once per option. (This used to name zpl_ask, which
+    // was removed — the comment outlived the tool.)
     const scores = input.scores as number[][];
     if (!scores?.[0]) throw new Error("Scores matrix required");
     return { ...computeOptionBias(scores[0]), samples: 1000 };
@@ -134,107 +136,15 @@ export const universalLens: DomainLens = {
   },
 
   interpretSweep(): string {
-    return "Use zpl_ask for universal questions instead of sweep.";
+    // AUDIT 2026-07-30: this pointed users at zpl_ask, a tool that no longer
+    // exists — anyone running zpl_analyze with domain "universal" and
+    // sweep: true was sent to something they cannot call. Named the tools
+    // that are actually registered instead.
+    return (
+      "A sweep varies the input density and reports how the score moves, which " +
+      "says nothing useful about a question with named options. Use zpl_decide " +
+      "for two choices, zpl_compare to weigh them across criteria, or zpl_rank " +
+      "for more than two."
+    );
   },
 };
-
-/**
- * Run full multi-option comparison.
- * Called by the zpl_ask tool — computes AIN for each option separately.
- */
-export interface AskResult {
-  question: string;
-  options: OptionResult[];
-  winner: string;
-  winner_ain: number;
-  summary: string;
-  factor_breakdown: string;
-}
-
-export interface OptionResult {
-  name: string;
-  ain: number;
-  status: string;
-  signal: string;
-  bias: number;
-  deviation: number;
-  tokens_used: number;
-  compute_ms: number;
-  factor_scores: Record<string, number>;
-}
-
-export function buildOptionParams(scores: number[]): { d: number; bias: number; samples: number } {
-  const { d, bias } = computeOptionBias(scores);
-  return { d, bias, samples: 1000 };
-}
-
-export function interpretOption(
-  name: string,
-  result: ComputeResponse,
-  factors: string[],
-  scores: number[],
-): OptionResult {
-  const ain = ainScale(result.ain);
-  let signal: string;
-  if (ain >= 75) signal = "EXCELLENT";
-  else if (ain >= 55) signal = "GOOD";
-  else if (ain >= 40) signal = "MODERATE";
-  else if (ain >= 25) signal = "WEAK";
-  else signal = "POOR";
-
-  const factorScores: Record<string, number> = {};
-  factors.forEach((f, i) => { factorScores[f] = scores[i] ?? 0; });
-
-  // Only expose AIN + status + signal. Bias/deviation/timing never shown to protect IP.
-  return {
-    name,
-    ain,
-    status: result.ain_status,
-    signal,
-    bias: 0,
-    deviation: 0,
-    tokens_used: 0,
-    compute_ms: 0,
-    factor_scores: factorScores,
-  };
-}
-
-export function formatAskResult(
-  question: string,
-  options: OptionResult[],
-  factors: string[],
-  context?: string,
-): AskResult {
-  // Sort by AIN descending — highest balance wins
-  const sorted = [...options].sort((a, b) => b.ain - a.ain);
-  const winner = sorted[0];
-
-  // Build summary — AIN score only. No bias, no deviation, no timing, no hints about internals.
-  const ctx = context ?? "decision";
-  let summary = `## ${question}\n\n`;
-
-  for (const opt of sorted) {
-    summary += `- **${opt.name}** — AIN ${fmtAin(opt.ain)}/100\n`;
-  }
-
-  if (sorted.length >= 2) {
-    const diff = sorted[0].ain - sorted[1].ain;
-    summary += `\n`;
-    if (diff <= 5) {
-      summary += `Very close — **${sorted[0].name}** (${fmtAin(sorted[0].ain)}) and **${sorted[1].name}** (${fmtAin(sorted[1].ain)}) score nearly equal. Personal preference decides.`;
-    } else if (diff <= 15) {
-      summary += `**${sorted[0].name}** (${fmtAin(sorted[0].ain)}) scores higher than **${sorted[1].name}** (${fmtAin(sorted[1].ain)}).`;
-    } else {
-      summary += `**${sorted[0].name}** (${fmtAin(sorted[0].ain)}) scores clearly higher than **${sorted[1].name}** (${fmtAin(sorted[1].ain)}).`;
-    }
-  }
-
-  return {
-    question,
-    options: sorted,
-    winner: winner.name,
-    winner_ain: winner.ain,
-    summary,
-    factor_breakdown: "",
-  };
-}
