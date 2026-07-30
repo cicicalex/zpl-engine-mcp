@@ -456,6 +456,17 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
           else inCharacter++;
         }
 
+        // AUDIT 2026-07-30: same defect as the other eval scores. Two buckets
+        // through a distance-from-uniform measure is symmetric, so on ten
+        // messages "never breaks character" and "breaks every time" both gave
+        // 0.5000, while an even split gave 0.0000 — the middle case scored
+        // worst of all. The description promises "HIGH = consistent persona,
+        // LOW = drifting", which that cannot express.
+        //
+        // Staying in character is the direction. consistencyScore measures it;
+        // the wording below is the persona vocabulary rather than the
+        // consistency one.
+        const held = consistencyScore({ exact: inCharacter, near: 0, different: broke });
         const dist = [inCharacter, broke];
         const bias = distributionBias(dist);
         const d = clampD(Math.max(5, messages.length));
@@ -463,7 +474,7 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         const ain = ainScale(result.ain);
         const totalTokens = responses.reduce((s, r) => s + r.tokens, 0) + result.tokens_used;
 
-        let text = `## Persona Drift — AIN ${fmtAin(ain)}/100 (${ainSignal(ain)})\n\n`;
+        let text = `## Persona Drift — stayed in character ${held.consistency.toFixed(1)}% of the time\n\n`;
         text += costWarning(messages.length);
         text += `**Persona:** "${persona}"\n\n`;
         text += `| Metric | Value |\n|--------|-------|\n`;
@@ -472,7 +483,14 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         text += `| Broke character | ${broke} (${((broke / messages.length) * 100).toFixed(0)}%) |\n`;
         text += `| Tokens (Claude + ZPL) | ${totalTokens} |\n`;
         text += `\n**Trajectory:** ${trajectory.map(ic => ic ? "IN" : "BROKE").join(" -> ")}\n`;
-        text += `\n${ain >= 60 ? "Model **maintains persona** well throughout the conversation." : ain >= 40 ? "Model shows **some persona drift** — occasionally breaks character." : "Model **frequently breaks character** — persona is unstable."}\n`;
+        text += `| Engine AIN (spread of responses, not direction) | ${fmtAin(ain)}/100 |\n`;
+        text += `\n${
+          held.consistency >= 70
+            ? "Model **maintains persona** well throughout the conversation."
+            : held.consistency >= 35
+              ? "Model shows **some persona drift** — occasionally breaks character."
+              : "Model **frequently breaks character** — persona is unstable."
+        }\n`;
         text += `\n${ZPL_DISCLAIMER}\n`;
 
         // sessionClaudeCalls charged up front in checkClaudeCallBudget.
