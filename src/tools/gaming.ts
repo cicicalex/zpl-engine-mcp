@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import type { Server } from "./helpers.js";
-import { distributionBias, concentrationBias, clampD, ZPL_DISCLAIMER } from "./helpers.js";
+import { distributionBias, concentrationBias, clampD, ZPL_DISCLAIMER, distributionFairness } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
 import { ainScale, fmtAin } from "../ain-format.js";
@@ -41,8 +41,23 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
           text += `| ${item.name} | ${item.drop_rate} | ${((item.drop_rate / total) * 100).toFixed(1)}% |\n`;
         }
 
-        if (ain >= 70) text += `\n**Verdict:** Loot table is well-balanced. Players should feel drops are fair.\n`;
-        else if (ain >= 40) text += `\n**Verdict:** Some items are significantly rarer. Acceptable for tiered loot but monitor player feedback.\n`;
+        // AUDIT 2026-07-30: these bands used to read `ain`, and the verdict
+        // came out exactly inverted — measured on the live engine, an
+        // 0.01/99.99 table returned "well-balanced" and a 50/50 table returned
+        // "heavy skew". The engine never saw the table: it received a single
+        // density derived from it and reported on random matrices generated at
+        // that density, where the fair table's value collapses the reading and
+        // the abusive one lands mid-range.
+        //
+        // The verdict now comes from the distribution itself, measured locally
+        // and deterministically. The engine's AIN is still shown above, but it
+        // describes something else and no longer decides whether a table is
+        // fair.
+        const fair = distributionFairness(rates);
+        text += `\n**Fairness:** ${fair.fairness.toFixed(1)}/100 (measured from the drop rates)\n`;
+        if (fair.band === "fair") text += `\n**Verdict:** Loot table is well-balanced. Players should feel drops are fair.\n`;
+        else if (fair.band === "tiered") text += `\n**Verdict:** Clearly tiered — rarer items are meaningfully harder to get. Normal for rarity tiers; worth watching player feedback.\n`;
+        else if (fair.band === "harsh") text += `\n**Verdict:** Harsh distribution. A small number of entries take most of the probability mass.\n`;
         else text += `\n**Verdict:** Heavy skew detected. Some items are almost impossible to get — likely to frustrate players.\n`;
 
         text += `**Tokens:** ${result.tokens_used}`;
@@ -238,9 +253,25 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
           text += `**Worst-case cost for top tier:** $${costToGuarantee.toFixed(2)}\n`;
         }
 
-        if (ain >= 60) text += `\n**Verdict:** Rates are reasonable. System appears fair.\n`;
-        else if (ain >= 30) text += `\n**Verdict:** Moderate skew. Top-tier items are quite rare. ${pity ? "Pity system helps." : "No pity system — consider adding one."}\n`;
-        else text += `\n**Verdict:** Heavily predatory rates. Top-tier items are extremely rare. May face regulatory issues in EU/JP/CN.\n`;
+        // AUDIT 2026-07-30: these bands read `ain` and came out inverted, for
+        // the same reason as zpl_loot_table — the engine received a density
+        // derived from the tiers, never the tiers, and reported on random
+        // matrices generated from that number.
+        //
+        // Concentration is now measured directly from the rates. Note what it
+        // does and does not say: a gacha is deliberately non-uniform, so high
+        // concentration is the design rather than evidence of wrongdoing. The
+        // wording reflects that. Deciding what counts as predatory needs a
+        // criterion this tool does not have — top-tier rate against a
+        // jurisdiction's disclosure rules, pity depth, expected spend to a
+        // guaranteed pull — and inventing one here would repeat the mistake
+        // being fixed.
+        const conc = distributionFairness(rates);
+        text += `\n**Concentration:** ${(100 - conc.fairness).toFixed(1)}/100 — how far the rates sit from an even split, measured from the tiers you gave.\n`;
+        if (conc.band === "fair") text += `\n**Reading:** Rates are close to even across tiers.\n`;
+        else if (conc.band === "tiered") text += `\n**Reading:** Clearly tiered, in the ordinary way for a rarity system. ${pity ? "A pity system is declared." : "No pity system declared."}\n`;
+        else if (conc.band === "harsh") text += `\n**Reading:** Strongly concentrated — most probability mass sits in the common tiers. ${pity ? "Pity depth is what decides how this feels." : "No pity system declared, so the tail is unbounded."}\n`;
+        else text += `\n**Reading:** Extremely concentrated. Top tiers are a very small share of the mass. ${pity ? "Pity depth matters more than the headline rate here." : "No pity system declared — worth checking disclosure rules in EU, JP and CN markets."}\n`;
 
         text += `**Tokens:** ${result.tokens_used}`;
         addHistory({ tool: "zpl_gacha_audit", domain: "game", results: { tiers: tiers.map((t) => t.name), pity, tokens_used: result.tokens_used }, ain_scores: { gacha: ain } });

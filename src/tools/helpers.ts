@@ -180,6 +180,69 @@ export function distributionBias(values: number[]): number {
   return clampBias(deviation, "distributionBias");
 }
 
+/**
+ * How evenly a set of rates is distributed, as a 0-100 fairness score.
+ *
+ * AUDIT 2026-07-30: the gaming tools produced exactly inverted verdicts.
+ * Measured against the live engine before this existed:
+ *
+ *   0.0001 / 0.9999  ->  "Loot table is well-balanced."
+ *   0.5    / 0.5     ->  "Heavy skew detected."
+ *
+ * The cause was a scale collision rather than a mis-set threshold. Those tools
+ * measured distance from uniform — 0 meaning perfectly uniform — and handed it
+ * to the engine's density parameter, where 0 means an all-zeros matrix and the
+ * reading collapses. A fair table therefore looked degenerate, and an abusive
+ * one landed mid-range where scores are high.
+ *
+ * Remapping the input would not have fixed it. Measured on the engine, the
+ * response across the entire usable range spans roughly two points at d=9 and
+ * less above it; no mapping turns a two-point range into a verdict.
+ *
+ * So fairness is computed here, locally and deterministically, from the
+ * distribution itself. Normalised by item count: two items cannot be as
+ * unevenly split as fifty in absolute terms, and without normalising, a
+ * maximally unfair pair would outscore a mildly uneven fifty-item table.
+ *
+ * Throws on input that carries no distribution — all zeros, or fewer than two
+ * items. Returning a number there would be inventing one, which is the whole
+ * failure being corrected.
+ */
+export function distributionFairness(rates: number[]): {
+  fairness: number;
+  skew: number;
+  band: "fair" | "tiered" | "harsh" | "severe";
+} {
+  if (!Array.isArray(rates) || rates.length < 2) {
+    throw new Error(
+      `Fairness needs at least 2 items to compare (received ${rates?.length ?? 0}).`,
+    );
+  }
+  const total = rates.reduce((s, v) => s + Math.abs(v), 0);
+  if (total === 0) {
+    throw new Error(
+      "Every rate is zero, so there is no distribution to judge. " +
+        "Provide the actual drop rates or weights.",
+    );
+  }
+
+  const n = rates.length;
+  const share = rates.map((v) => Math.abs(v) / total);
+  const uniform = 1 / n;
+  // Total absolute deviation from uniform, halved so it lands in [0, 1-1/n].
+  const deviation = share.reduce((s, p) => s + Math.abs(p - uniform), 0) / 2;
+  // Divide by the worst case for this many items so the scale means the same
+  // thing whether there are 2 rarities or 50.
+  const skew = clampBias(deviation / (1 - uniform), "distributionFairness");
+  const fairness = (1 - skew) * 100;
+
+  return {
+    fairness,
+    skew,
+    band: fairness >= 85 ? "fair" : fairness >= 55 ? "tiered" : fairness >= 25 ? "harsh" : "severe",
+  };
+}
+
 /** Compute bias from directional imbalance (positive vs negative) */
 export function directionalBias(values: number[]): number {
   const pos = values.filter((v) => v > 0).length;
