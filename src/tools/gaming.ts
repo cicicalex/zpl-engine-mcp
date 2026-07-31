@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import type { Server } from "./helpers.js";
-import { distributionBias, concentrationBias, clampD, ZPL_DISCLAIMER, distributionFairness , chiSquareUniform } from "./helpers.js";
+import { distributionBias, concentrationBias, clampD, ZPL_DISCLAIMER, distributionFairness , chiSquareUniform, dimensionNote } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
 import { ainScale, fmtAin } from "../ain-format.js";
@@ -288,7 +288,7 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
     "Test whether a random number sequence is truly random or biased. Provide a sequence of outcomes and the expected distribution. Useful for auditing dice rolls, card draws, slot machines, etc.",
     {
       outcomes: z.array(z.number()).min(10).max(1000).describe("Sequence of outcomes (e.g. dice results: [1,3,6,2,4,5,1,3,...]"),
-      possible_values: z.number().int().min(2).describe("Number of possible outcomes (e.g. 6 for a die)"),
+      possible_values: z.number().int().min(2).max(100).describe("Number of possible outcomes (e.g. 6 for a die). Max 100: the engine's dimension is derived from this."),
     },
     async ({ outcomes, possible_values }) => {
       try {
@@ -304,6 +304,16 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
           const idx = Math.min(possible_values - 1, Math.max(0, Math.round(o) - 1));
           counts[idx]++;
         }
+        // AUDIT 2026-07-31, cross-surface dimension sweep: possible_values had
+        // no upper bound, so a caller passing 500 had d silently rewritten to
+        // 100. The TypeScript SDK, this MCP's own zpl_compute schema and the
+        // website all reject an out-of-range dimension with a message naming
+        // the bound; only the path that derives d from the caller's data said
+        // nothing. Bounded to the engine's maximum so it is refused clearly.
+        //
+        // The lower end stays at 2, because a coin is a legitimate thing to
+        // test and it is the most common one. The engine's minimum is 3, so d
+        // genuinely differs from the input there, and the output now says so.
         const d = clampD(possible_values);
         const bias = distributionBias(counts);
         const result = await client.compute({ d, bias, samples: 3000 });
@@ -328,6 +338,7 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
         const expected = outcomes.length / possible_values;
         let text = `## RNG Fairness Test — p = ${chi.p < 0.0001 ? "<0.0001" : chi.p.toFixed(4)}\n\n`;
         text += `**Engine AIN:** ${fmtAin(ain)}/100 — the engine's own reading, not the fairness test.\n\n`;
+        text += dimensionNote(possible_values) ?? "";
 
         if (insufficientSamples) {
           text += `> ⚠️  **Insufficient sample size for reliable test.** ` +

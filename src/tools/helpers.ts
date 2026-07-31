@@ -446,9 +446,40 @@ export function concentrationBias(shares: number[]): number {
   return clampBias((hhi - minHHI) / (1 - minHHI), "concentrationBias");
 }
 
+/** Smallest and largest dimension the engine accepts. */
+export const MIN_D = 3;
+export const MAX_D = 100;
+
 /** Clamp dimension to valid range */
 export function clampD(n: number): number {
-  return Math.max(3, Math.min(100, Math.round(n)));
+  return Math.max(MIN_D, Math.min(MAX_D, Math.round(n)));
+}
+
+/**
+ * Say so when the dimension used is not the one the input implied.
+ *
+ * AUDIT 2026-07-31, dimension sweep across all four surfaces: the TypeScript
+ * SDK, the MCP's own zpl_compute schema and the website all reject a dimension
+ * outside 3..100 with a message naming the bound. clampD, which 41 tool call
+ * sites use, silently rewrites it instead — so the one surface that derives the
+ * dimension from the caller's data is also the one that never mentions
+ * changing it.
+ *
+ * In practice almost every tool's array bounds already keep the result inside
+ * the range, so this fires rarely. Rarely is not never, and a reading taken at
+ * a different dimension from the data is worth one line of output rather than
+ * silence.
+ *
+ * Returns null when nothing was changed, so callers can append unconditionally.
+ */
+export function dimensionNote(requested: number): string | null {
+  const used = clampD(requested);
+  const asked = Math.round(requested);
+  if (used === asked) return null;
+  return (
+    `\n> **Dimension adjusted:** your input implies d=${asked}, and the engine accepts ` +
+    `${MIN_D}–${MAX_D}. The engine reading below was taken at d=${used}.\n`
+  );
 }
 
 /* -------------------------------------------------------------------------- */
