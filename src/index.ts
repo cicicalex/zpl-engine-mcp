@@ -14,6 +14,7 @@
  * No computation logic exists in this codebase.
  */
 
+import { createHash } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -261,6 +262,38 @@ server.tool(
       }
       text += `\n*Tokens used: ${result.tokens_used}*\n`;
       text += `\n${ZPL_DISCLAIMER}\n`;
+
+      // AUDIT 2026-07-31: this was the only tool that reached the engine and
+      // wrote nothing to history. Around 45 tools across every domain module
+      // call addHistory, so the omission was not a house style - it was the one
+      // tool carrying the caller's own data leaving no trace of having run.
+      //
+      // What is recorded is the verdict and the shape, plus a digest of the
+      // matrix - never the matrix. A digest is enough to prove later that a
+      // given input produced a given verdict, which is the whole point of a
+      // deterministic engine, and it keeps up to 10,000 cells of somebody's
+      // data out of history.json on disk. Storing the input would have made
+      // the audit trail itself the largest thing this package holds.
+      //
+      // ain_scores is {} because zpl_matrix returns no AIN, for the reason its
+      // own description gives: one matrix is a single observation. The field is
+      // required by HistoryEntry, so empty is the honest value, not a zero.
+      addHistory({
+        tool: "zpl_matrix",
+        results: {
+          label: label ?? null,
+          n: result.n,
+          matrix_sha256: createHash("sha256").update(JSON.stringify(matrix)).digest("hex"),
+          unanimous: result.unanimous,
+          ones: result.ones,
+          families: result.families.map((f) => ({ family: f.family, bit: f.bit, tie_broken: f.tie_broken })),
+          input_ones: result.input_ones,
+          cells: result.cells,
+          degenerate: result.degenerate,
+          tokens_used: result.tokens_used,
+        },
+        ain_scores: {},
+      });
 
       return { content: [{ type: "text" as const, text }] };
     } catch (err) {
