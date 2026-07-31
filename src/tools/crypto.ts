@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import type { Server } from "./helpers.js";
-import { concentrationBias, distributionBias, varianceBias, clampD } from "./helpers.js";
+import { concentrationBias, distributionBias, varianceBias, clampD, whaleConcentrationBand, insiderShareBand } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
 import { ainScale, fmtAin } from "../ain-format.js";
@@ -33,17 +33,47 @@ export function registerCryptoTools(server: Server, getClient: () => ZPLEngineCl
         const ain = ainScale(result.ain);
         const label = token ?? "Token";
 
+        // AUDIT 2026-07-31: measured against the live engine, before:
+        //
+        //   top 5 hold   5% of supply -> "High whale risk! Rug pull risk elevated."
+        //   top 5 hold 100% of supply -> "High whale risk!"
+        //   top 5 hold  51%, one at 40% -> "Well-distributed. Low whale risk.
+        //                                   Healthy decentralization."
+        //
+        // The safest book and the most dangerous one got the same verdict, and
+        // the genuinely concentrated case got the reassuring one.
+        //
+        // Two faults, not one. The inversion is the same as everywhere else
+        // tonight — concentrationBias is 0 for an even split and 0 collapses
+        // the engine reading. But evenness was also the wrong question: five
+        // holders at 20% each are perfectly even AND own the entire supply.
+        // Swapping in a fairness measure would have kept the tool wrong while
+        // making it look fixed.
+        //
+        // Whale risk is how much of the supply the listed holders control, and
+        // whether any single one is large enough to move the price alone. The
+        // tool already computed and printed the first number one line below the
+        // headline; it just did not use it.
+        //
+        // The band edges below are a judgement call, not a measurement — Alex's
+        // to set. What the tests pin is the ordering, which is not a judgement
+        // call: more supply in the top holders must never produce a calmer
+        // verdict.
         const topTotal = pcts.reduce((s, v) => s + v, 0);
-        let text = `## ${label} Whale Check — AIN ${fmtAin(ain)}/100\n\n`;
-        text += `**Top ${holders.length} holders control ${topTotal.toFixed(1)}% of supply**\n`;
+        const largest = Math.max(...pcts);
+        const whaleBand = whaleConcentrationBand(topTotal, largest);
+        let text = `## ${label} Whale Check — top ${holders.length} hold ${topTotal.toFixed(1)}% of supply\n\n`;
+        text += `**Engine AIN:** ${fmtAin(ain)}/100 — the engine's own reading, not the concentration above.\n\n`;
         if (total_holders) text += `**Total holders:** ${total_holders.toLocaleString()}\n`;
         text += `\n| Holder | Share |\n|--------|-------|\n`;
         for (const h of holders) {
           text += `| ${h.label ?? "Wallet"} | ${h.percentage.toFixed(2)}% |\n`;
         }
 
-        if (ain >= 70) text += `\n**Verdict:** Well-distributed. Low whale risk. Healthy decentralization.\n`;
-        else if (ain >= 40) text += `\n**Verdict:** Moderate concentration. A few wallets hold significant supply. Watch for whale dumps.\n`;
+        text += `\n**Largest single holder:** ${largest.toFixed(2)}% of supply\n`;
+        if (whaleBand === "low") text += `\n**Verdict:** Well-distributed. Low whale risk. Healthy decentralization.\n`;
+        else if (whaleBand === "moderate") text += `\n**Verdict:** Moderate concentration. A few wallets hold significant supply. Watch for whale dumps.\n`;
+        else if (whaleBand === "elevated") text += `\n**Verdict:** Elevated concentration. The listed holders together could move the price.\n`;
         else text += `\n**Verdict:** High whale risk! Top holders can crash the price. Rug pull risk elevated.\n`;
 
         text += `**Tokens:** ${result.tokens_used}`;
@@ -193,7 +223,42 @@ export function registerCryptoTools(server: Server, getClient: () => ZPLEngineCl
         const ain = ainScale(result.ain);
         const label = token ?? "Token";
 
-        let text = `## ${label} Tokenomics — AIN ${fmtAin(ain)}/100\n\n`;
+        // AUDIT 2026-07-31: measured against the live engine, before:
+        //
+        //   insiders 10% / community 80% -> "Fair distribution."
+        //   insiders 40% / community 40% -> "Insider-heavy. High concentration
+        //                                    risk."
+        //   insiders 85% / community 10% -> "Fair distribution. Community has
+        //                                    meaningful ownership."
+        //
+        // A token where insiders hold 85% was certified fair, with the words
+        // "community has meaningful ownership" printed directly beneath the
+        // tool's own line reading "Insider allocation: 85.0% | Community:
+        // 10.0%". The 40/40 case, which is better on every reading, got the
+        // harshest verdict of the three.
+        //
+        // Same inversion as everywhere else, and the same second fault as
+        // zpl_whale_check: evenness across allocation categories is not what
+        // "fair tokenomics" means. A 50% community / 10% team split is better
+        // than a perfectly even four-way split, not worse.
+        //
+        // The verdict now comes from the insider share, which the tool already
+        // computed and printed. Thresholds are a judgement call and Alex's to
+        // set; the ordering is not, and the tests pin it.
+        const insiderPctForVerdict = allocations
+          .filter((a) => ["team", "investors", "advisors", "founders"].some((k) => a.category.toLowerCase().includes(k)))
+          .reduce((s, a) => s + a.percentage, 0);
+        const communityPctForVerdict = allocations
+          .filter((a) => ["community", "public", "airdrop", "ecosystem", "rewards"].some((k) => a.category.toLowerCase().includes(k)))
+          .reduce((s, a) => s + a.percentage, 0);
+        // Both buckets are keyword matches on free-text category names. When a
+        // caller labels allocations something this does not recognise, both come
+        // out 0 — and a verdict of "fair, insiders hold 0%" would be invented
+        // rather than measured. That case says what happened instead.
+        const recognised = insiderPctForVerdict > 0 || communityPctForVerdict > 0;
+
+        let text = `## ${label} Tokenomics — insiders ${recognised ? `${insiderPctForVerdict.toFixed(1)}%` : "not identifiable"}\n\n`;
+        text += `**Engine AIN:** ${fmtAin(ain)}/100 — the engine's own reading, not the insider share.\n\n`;
         text += `| Category | % Supply | ${allocations[0].vesting_months !== undefined ? "Vesting |" : ""}\n`;
         text += `|----------|----------|${allocations[0].vesting_months !== undefined ? "---------|" : ""}\n`;
         for (const a of allocations) {
@@ -211,9 +276,19 @@ export function registerCryptoTools(server: Server, getClient: () => ZPLEngineCl
 
         text += `\n**Insider allocation:** ${insiderPct.toFixed(1)}% | **Community:** ${communityPct.toFixed(1)}%\n`;
 
-        if (ain >= 65) text += `**Verdict:** Fair distribution. Community has meaningful ownership.\n`;
-        else if (ain >= 35) text += `**Verdict:** Moderately concentrated. Insiders hold significant share — check vesting.\n`;
-        else text += `**Verdict:** Insider-heavy. High concentration risk. Dump potential when vesting unlocks.\n`;
+        if (!recognised) {
+          text +=
+            `**Verdict:** Cannot judge. No allocation category was recognisable as ` +
+            `insider (team, investors, advisors, founders) or community (community, ` +
+            `public, airdrop, ecosystem, rewards), so there is nothing to compare. ` +
+            `Relabel the categories and run again.\n`;
+        } else {
+          const band = insiderShareBand(insiderPctForVerdict);
+          if (band === "fair") text += `**Verdict:** Fair distribution. Community has meaningful ownership.\n`;
+          else if (band === "moderate") text += `**Verdict:** Moderately concentrated. Insiders hold significant share — check vesting.\n`;
+          else if (band === "insider-heavy") text += `**Verdict:** Insider-heavy. High concentration risk. Dump potential when vesting unlocks.\n`;
+          else text += `**Verdict:** Insiders hold the majority of supply. Whatever the vesting schedule says, control sits with them.\n`;
+        }
 
         text += `**Tokens:** ${result.tokens_used}`;
         addHistory({ tool: "zpl_tokenomics", domain: "crypto", results: { token, insiderPct, communityPct, tokens_used: result.tokens_used }, ain_scores: { [label]: ain } });

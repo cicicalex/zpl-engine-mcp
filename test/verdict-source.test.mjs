@@ -68,8 +68,8 @@ const LOCAL_MEASURE =
  */
 const KNOWN_INVERTED = [
   "certification.ts:zpl_debate",
-  "crypto.ts:zpl_tokenomics",
-  "crypto.ts:zpl_whale_check",
+  // crypto.ts:zpl_whale_check and zpl_tokenomics converted 2026-07-31 - both
+  // needed a domain measure rather than a fairness one; see helpers.ts.
   "eval.ts:zpl_language_equity",
   // finance.ts:zpl_portfolio converted 2026-07-31 — measured 25/25/25/25 at
   // AIN 0.00 "heavily skewed" and 97/1/1/1 at AIN 43.70 "some concentration

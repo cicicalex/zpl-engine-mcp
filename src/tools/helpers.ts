@@ -452,6 +452,56 @@ export function clampD(n: number): number {
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Domain bands                                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How exposed a token is to its largest holders.
+ *
+ * AUDIT 2026-07-31: zpl_whale_check took its verdict from AIN derived from
+ * concentrationBias, and returned "Well-distributed. Low whale risk. Healthy
+ * decentralization." for a book whose top five held 51% of supply with a
+ * single 40% wallet — while calling a top five holding 5% high risk.
+ *
+ * Evenness was the wrong question as well as the wrong number: five holders at
+ * 20% each are perfectly even and own the entire supply. What matters is how
+ * much the listed holders control between them, and whether any one of them is
+ * large enough to move the price alone.
+ *
+ * SEVERITY fixes the ordering; the numbers are a judgement call and Alex's to
+ * change. Ordering is what the tests pin, and it is not a judgement call: more
+ * supply in the top holders must never produce a calmer band.
+ */
+export const WHALE_BANDS = ["low", "moderate", "elevated", "high"] as const;
+export type WhaleBand = (typeof WHALE_BANDS)[number];
+
+export function whaleConcentrationBand(topTotal: number, largest: number): WhaleBand {
+  if (topTotal >= 60 || largest >= 30) return "high";
+  if (topTotal >= 40 || largest >= 20) return "elevated";
+  if (topTotal >= 20 || largest >= 10) return "moderate";
+  return "low";
+}
+
+/**
+ * How much of a token's supply sits with insiders.
+ *
+ * AUDIT 2026-07-31: zpl_tokenomics called an 85% insider allocation "Fair
+ * distribution. Community has meaningful ownership.", one line under its own
+ * "Insider allocation: 85.0%".
+ *
+ * Same note on thresholds as above: the edges are Alex's, the ordering is not.
+ */
+export const INSIDER_BANDS = ["fair", "moderate", "insider-heavy", "majority"] as const;
+export type InsiderBand = (typeof INSIDER_BANDS)[number];
+
+export function insiderShareBand(insiderPct: number): InsiderBand {
+  if (insiderPct > 50) return "majority";
+  if (insiderPct > 35) return "insider-heavy";
+  if (insiderPct > 20) return "moderate";
+  return "fair";
+}
+
+/* -------------------------------------------------------------------------- */
 /*  What a call costs                                                          */
 /* -------------------------------------------------------------------------- */
 
