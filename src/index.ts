@@ -29,7 +29,7 @@ import { loadApiKey } from "./config.js";
 import { getValidatedEngineBaseUrl } from "./engine-url.js";
 import { getMcpPackageVersion } from "./package-meta.js";
 import { ainScale, fmtAin, ainPct } from "./ain-format.js";
-import { equilibriumOffset, ZPL_DISCLAIMER, tokenCostTable } from "./tools/helpers.js";
+import { equilibriumOffset, ZPL_DISCLAIMER, tokenCostTable, getTokenCost } from "./tools/helpers.js";
 import { TOOL_COUNT_PHRASE } from "./tool-count.js";
 // API key format validation extracted to api-key-format.ts for unit testing.
 // v3.7.2: Accepts wizard-issued keys with type prefixes (zpl_u_mcp_, zpl_u_cli_,
@@ -248,6 +248,39 @@ server.tool(
       if (result.degenerate) {
         const all = result.input_ones === 0 ? "0" : "1";
         text += `> **Every cell in this matrix is ${all}.** At even dimensions the families can return the same verdict for an all-0 and an all-1 matrix, so read the agreement below with that in mind.\n\n`;
+      } else if (result.n % 2 === 0) {
+        // AUDIT 2026-07-31: `degenerate` fires only for a uniform matrix, and
+        // that is a narrower warning than the reading needs. Measured over the
+        // engine at n = 16, 32, 48, 64 and 100 - every even dimension sold -
+        // five of eight distinct test shapes return one identical set of family
+        // bits: an all-0 matrix, an all-1 matrix, a checkerboard, a left-half
+        // matrix and a top-half matrix. Only two of those five are degenerate.
+        //
+        // So a caller sending a checkerboard at n=48 got a confident verdict
+        // table and nothing telling them a blank matrix produces the same one.
+        // At odd dimensions the same sweep separates seven of the eight.
+        //
+        // Every paid ceiling except Pro's 25 is even: 16, 32, 48, 64, 100.
+        // This is the reading customers pay most for.
+        // What the odd alternative actually costs. Every sold even ceiling sits
+        // at the TOP of a cost band - 16, 32, 48 and 64 are all band edges - so
+        // n+1 always crosses into the next band and costs 3-4x more. Saying
+        // "just use n+1" without that would be advice priced at someone else's
+        // expense. And at 100 there is no odd option at all: the engine rejects
+        // d > 100, so the largest legal odd dimension is 99, which is smaller.
+        const here = getTokenCost(result.n);
+        const odd = result.n < 100 ? getTokenCost(result.n + 1) : null;
+        const advice = odd === null
+          ? `100 is the largest dimension the engine accepts, so there is no odd dimension above it — ` +
+            `99 discriminates but is smaller than what you sent.`
+          : `Re-running at ${result.n + 1} discriminates, but it crosses a cost band: ` +
+            `${here} tokens becomes ${odd}.`;
+
+        text += `> **${result.n} is an even dimension, and even dimensions discriminate less.** ` +
+          `Measured across the sold range, five structurally different matrices — uniform, ` +
+          `checkerboard, and half-filled by row or by column — return one identical set of ` +
+          `family bits at even n, where an odd dimension tells seven of eight apart. ` +
+          `The verdict below may not be specific to your arrangement. ${advice}\n\n`;
       }
       if (result.input_ones !== undefined && result.cells !== undefined) {
         const pct = ((result.input_ones / result.cells) * 100).toFixed(1);

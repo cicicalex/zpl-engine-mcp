@@ -8,7 +8,7 @@ Connects any MCP-compatible AI client (Claude Desktop, Claude Code, Cursor, Wind
 
 ## What's new in v4.0.0 (MAJOR RELEASE)
 
-Two months of incremental work consolidated. **21 bugs fixed**, **245 tests** (196 unit + 49 live MCP integration), **Windows + Linux verified**. Backwards compatible — legacy `zpl_u_<48hex>` keys still work, all 69 tools keep the same input shape.
+Two months of incremental work consolidated. **21 bugs fixed**, **248 tests** (199 unit + 49 live MCP integration), **Windows + Linux verified**. Backwards compatible — legacy `zpl_u_<48hex>` keys still work, all 69 tools keep the same input shape.
 
 ### New commands
 - **`npx zpl-engine-mcp setup`** — now memory-aware. Detects existing config and offers keep / re-setup / patch-only instead of forcing a fresh login. `--force` bypasses.
