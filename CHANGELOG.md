@@ -5,6 +5,53 @@ All notable changes to `zpl-engine-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.0] — 2026-07-31
+
+Note: 4.2.0 and 4.2.1 shipped without changelog entries. They are not
+reconstructed here — this entry covers 4.2.1 → 4.3.0 only.
+
+### Added
+- `zpl_matrix` — analyse a specific binary matrix you supply, via the engine's
+  new `POST /analyze`. Unlike `zpl_compute`, which reports on random matrices
+  generated at a density, this runs the method over your data. Requires an
+  engine that serves `/analyze`; older engines return 404.
+- `zpl_matrix` states plainly when every cell of the supplied matrix is
+  identical. At even dimensions the family verdicts cannot distinguish an
+  all-zero from an all-one matrix, so the agreement line alone could not.
+- Guards: the method may not appear in a published package; the README's test
+  and tool counts must match reality; no tool may take its verdict from a
+  distance-from-uniform measure.
+
+### Fixed
+- Eleven tools reported verdicts that were inverted. Measured against the live
+  engine: a 500/500 class split returned "severe prediction bias" while 990/10
+  returned "well-distributed"; a 25/25/25/25 portfolio read "heavily skewed"
+  while 97/1/1/1 read milder; a token with 85% held by insiders was called
+  "fair distribution"; a system with every component at CVSS 9.5 was told it
+  had no single point of failure. Affected: `zpl_model_bias`,
+  `zpl_dataset_audit`, `zpl_prompt_test`, `zpl_portfolio`, `zpl_whale_check`,
+  `zpl_tokenomics`, `zpl_vuln_map`, `zpl_risk_score`, `zpl_rng_test`,
+  `zpl_debate`, `zpl_language_equity`.
+- `zpl_plans` published a cost rule nothing charges — "d squared plus d, so
+  d=9 costs 90 tokens". A d=9 call costs 2. The bands are now printed from the
+  same function the engine bills from.
+- `zpl_rng_test` now runs the chi-square goodness-of-fit test it already
+  described in its own under-sampling warning, instead of deciding from a
+  measure that called a uniform sequence biased.
+- `zpl_vuln_map` and `zpl_risk_score` take their posture from the worst finding
+  using the thresholds they already print per row, not from how evenly risk was
+  spread. An all-critical system is no longer congratulated.
+
+### Changed
+- One vocabulary for AIN across the whole package. `ainSignal`, the `zpl_teach`
+  scoring guide and the universal domain each had their own bands, all softer
+  than the engine's — AIN 75 read "GOOD" where the engine reports
+  MODERATE_BIAS. All three now use the engine's boundaries and names.
+- The `zpl_teach` cost table lists every band; it previously stopped at d=48,
+  leaving Enterprise and Enterprise XL customers with no line for their range.
+- `zpl_rng_test`'s `possible_values` is bounded to 100 and a clamped dimension
+  is disclosed rather than applied silently.
+
 ## [4.1.4] — 2026-05-12
 
 Funnel finding from the 12.05 audit: when a free-tier user runs out of
