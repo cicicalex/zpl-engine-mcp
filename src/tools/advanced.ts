@@ -478,7 +478,10 @@ response. Nothing here re-grades them.
 **Token cost (tiered by dimension):**
 ${tokenCostTable()}
 
-**Sweep:** 19× the single compute cost (tests all bias levels)`,
+**Sweep:** 19× the single compute cost — bias 0.05 to 0.95, which is not the
+whole interval. Measured across those steps the reading stays between 0.89 and
+1.00; it falls away to zero only below 0.05 and above 0.95, and the sweep cannot
+reach either end. Use zpl_compute directly there.`,
 
         "plans": `## ZPL Engine Plans
 

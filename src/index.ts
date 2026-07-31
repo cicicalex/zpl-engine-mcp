@@ -174,7 +174,26 @@ server.tool(
 
 server.tool(
   "zpl_sweep",
-  "Run a ZPL Engine sweep: tests all 19 bias levels (0.0 to 1.0) for a given dimension. Shows how stability changes as bias increases. Useful for understanding sensitivity and finding neutral points. Costs 19x a single compute.",
+  // AUDIT 2026-07-31: this said "tests all 19 bias levels (0.0 to 1.0)". The
+  // engine's 19 steps are 0.05 to 0.95, and the endpoints are not a rounding
+  // detail — they are where the whole dynamic range of the reading lives.
+  // Measured at d=9, samples=50000:
+  //
+  //   bias 0      -> ain 0.000     bias 0.95 (last step) -> high
+  //   bias 0.001  -> ain 0.099     bias 0.99  -> ain 0.500
+  //   bias 0.01   -> ain 0.657     bias 0.999 -> ain 0.065
+  //   bias 0.05 (first step) -> ain 0.891     bias 1 -> ain 0.000
+  //
+  // Across the sweep's own range the reading stays between 0.891 and 1.000 at
+  // every dimension tried. So the tool sold for "understanding sensitivity"
+  // samples the plateau and skips both cliffs, while claiming to have covered
+  // 0.0 to 1.0. Someone paying 19x to see how the reading responds was shown
+  // the one region where it barely does.
+  "Run a ZPL Engine sweep: 19 bias steps from 0.05 to 0.95 for a given dimension. " +
+    "Note what this does NOT cover: measured across those steps the reading stays " +
+    "between 0.89 and 1.00, while below 0.05 and above 0.95 it falls away to 0. " +
+    "If you are looking for where the reading actually changes, call zpl_compute " +
+    "directly at bias 0.01 or 0.99 - the sweep cannot reach them. Costs 19x a single compute.",
   {
     d: z.number().int().min(3).max(100).describe("Matrix dimension to sweep"),
     samples: z.number().int().min(100).max(50000).optional().default(1000).describe("Samples per step"),
