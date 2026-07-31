@@ -92,17 +92,110 @@ function costWarning(calls: number): string {
 }
 
 /** Extract shared key terms from text (simple: top words by frequency) */
+/**
+ * Words shorter than four characters that decide what an answer means.
+ *
+ * AUDIT 2026-08-01: keyTerms kept only words longer than three characters,
+ * which is exactly the set that carries polarity, negation and small numbers.
+ * Measured on the shipped implementation:
+ *
+ *   "Yes."              vs "No."               -> 1.00   (0 terms each)
+ *   "it is prime"       vs "it is not prime"   -> 1.00   (both ["prime"])
+ *   "The answer is 42." vs "The answer is 17." -> 1.00   (both ["answer"])
+ *
+ * Every directly contradictory pair scored a perfect match, so
+ * zpl_consistency_test reported "Model is consistent across runs" for a model
+ * that had answered yes and no to the same question. That is the same
+ * inverted-verdict shape found five times elsewhere in this package: the
+ * degenerate case produced the best possible verdict instead of an abstention.
+ */
+const MEANING_BEARING_SHORT_WORDS = new Set([
+  "no", "not", "nor", "yes", "yep", "nah", "non", "nu", "da",
+  "is", "was", "can", "may", "off", "on", "up", "low", "few", "all", "any", "one", "two",
+  "up", "bad", "top", "min", "max", "pro", "con",
+]);
+
 function keyTerms(text: string): Set<string> {
-  const words = text.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(w => w.length > 3);
+  const words = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .split(/\s+/)
+    .filter(
+      (w) =>
+        w.length > 3 ||
+        MEANING_BEARING_SHORT_WORDS.has(w) ||
+        // Numbers of any length: "42" and "17" are the whole answer to a
+        // factual question, and both were being dropped.
+        /^\d+$/.test(w),
+    );
   return new Set(words);
 }
 
-/** Jaccard similarity between two sets */
-function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
-  let intersection = 0;
-  for (const v of a) if (b.has(v)) intersection++;
-  const union = new Set([...a, ...b]).size;
-  return union === 0 ? 1 : intersection / union;
+/** Text with punctuation and spacing normalised, for the degenerate case. */
+function normalisedText(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * How alike two responses are, 0..1.
+ *
+ * AUDIT 2026-08-01: this was raw Jaccard over the term sets, and returned 1
+ * when the union was empty - so two answers with no scoreable terms were
+ * called identical rather than uncomparable. Widening keyTerms above fixes the
+ * common cases, but a pair can still reduce to nothing (punctuation, emoji, a
+ * single stopword), and "no terms" is not evidence of agreement.
+ *
+ * When neither side yields a term, the texts themselves are compared. That is
+ * the honest answer for short replies: "Yes." and "Yes." really are the same
+ * response, and "Yes." and "No." really are not.
+ */
+const NEGATION = /\b(no|not|never|cannot|can't|isn't|aren't|wasn't|doesn't|don't|won't|nor|none|neither|false|incorrect|wrong)\b/i;
+
+/**
+ * Ceiling applied when exactly one of two responses is negated.
+ *
+ * Bag-of-word overlap cannot see negation: "it is prime" and "it is not prime"
+ * share every scoreable term but one and come out at 0.67, which the callers
+ * read as a near-match. A contradiction is not a near-match. 0.4 sits below
+ * every grouping threshold in this file (0.8 exact, 0.5 near), so a polarity
+ * mismatch lands in "different" wherever it is used.
+ *
+ * Deliberately a ceiling and not a zero: the two answers may still share a
+ * subject worth reporting overlap on, and claiming perfect disagreement would
+ * be the same overreach in the other direction.
+ */
+const POLARITY_MISMATCH_CEILING = 0.4;
+
+function responseSimilarity(aText: string, bText: string): number {
+  const a = keyTerms(aText);
+  const b = keyTerms(bText);
+
+  let sim: number;
+  if (a.size === 0 && b.size === 0) {
+    // Compare the texts. And when normalisation itself erases everything -
+    // "!!!" and "???" both reduce to the empty string - compare what was
+    // actually said instead. The first version of this fallback returned 1 for
+    // that pair, which is the original defect one level down: two different
+    // replies called identical because there was nothing left to tell them
+    // apart.
+    const na = normalisedText(aText);
+    const nb = normalisedText(bText);
+    sim = na === "" && nb === ""
+      ? (aText.trim() === bText.trim() ? 1 : 0)
+      : (na === nb ? 1 : 0);
+  } else {
+    let intersection = 0;
+    for (const v of a) if (b.has(v)) intersection++;
+    const union = new Set([...a, ...b]).size;
+    // union can only be 0 when both sets are empty, handled above.
+    sim = intersection / union;
+  }
+
+  // One negated, one not: whatever the overlap says, these do not agree.
+  if (NEGATION.test(aText) !== NEGATION.test(bText)) {
+    return Math.min(sim, POLARITY_MISMATCH_CEILING);
+  }
+  return sim;
 }
 
 export function registerEvalTools(server: Server, getClient: () => ZPLEngineClient) {
@@ -127,13 +220,15 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
 
         // Group by similarity: exact match, near-match (jaccard > 0.6), different
         const groups: { exact: number; near: number; different: number } = { exact: 0, near: 0, different: 0 };
-        const termSets = responses.map(r => keyTerms(r.text));
         const lengths = responses.map(r => r.text.split(/\s+/).length);
 
         for (let i = 0; i < responses.length; i++) {
           let bestSim = 0;
           for (let j = 0; j < i; j++) {
-            bestSim = Math.max(bestSim, jaccardSimilarity(termSets[i], termSets[j]));
+            // Compares the responses, not pre-extracted term sets: a pair whose
+            // terms both come out empty is decided on the text instead of being
+            // called identical. See responseSimilarity.
+            bestSim = Math.max(bestSim, responseSimilarity(responses[i].text, responses[j].text));
           }
           if (i === 0) { groups.exact++; continue; }
           if (bestSim > 0.8) groups.exact++;
@@ -626,14 +721,13 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
 
         for (const q of questions) {
           const responses = await runPromptNTimes(q, runs_per_question, { temperature: 0.0, maxTokens: 300 });
-          const termSets = responses.map(r => keyTerms(r.text));
           const lengths = responses.map(r => r.text.split(/\s+/).length);
 
-          // Check consistency: pairwise Jaccard similarity and length similarity
+          // Check consistency: pairwise similarity and length similarity
           let minSim = 1;
-          for (let i = 0; i < termSets.length; i++) {
-            for (let j = i + 1; j < termSets.length; j++) {
-              const sim = jaccardSimilarity(termSets[i], termSets[j]);
+          for (let i = 0; i < responses.length; i++) {
+            for (let j = i + 1; j < responses.length; j++) {
+              const sim = responseSimilarity(responses[i].text, responses[j].text);
               if (sim < minSim) minSim = sim;
             }
           }
