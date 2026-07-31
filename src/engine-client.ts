@@ -76,6 +76,20 @@ export interface AnalyzeResponse {
   families: FamilyVerdict[];
   ones: number;
   unanimous: boolean;
+  /**
+   * Cells set to 1 in the caller's own matrix, and the total.
+   *
+   * AUDIT 2026-07-31: the engine was swept over 3..=100. At every even
+   * dimension the four family bits for an all-zeros matrix are identical to
+   * those for an all-ones matrix - 49 of 49 even dimensions, none of the 49
+   * odd ones. Every paid ceiling except Pro's 25 is even: 16, 32, 48, 64, 100.
+   *
+   * Optional: an engine older than that sweep does not send them. Absent must
+   * stay absent - an input_ones of 0 is an all-zeros matrix, a real answer.
+   */
+  input_ones?: number;
+  cells?: number;
+  degenerate?: boolean;
   tokens_used: number;
   compute_ms?: number;
 }

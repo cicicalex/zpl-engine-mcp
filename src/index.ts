@@ -238,6 +238,20 @@ server.tool(
         : `split — ${result.ones} of ${result.families.length} returned 1`;
 
       let text = `## ${label ?? "Matrix"} — ${result.n}x${result.n}\n\n`;
+      // AUDIT 2026-07-31: the engine was swept over 3..=100. At every even
+      // dimension the four family bits for an all-zeros matrix are identical
+      // to those for an all-ones matrix, so agreement alone cannot tell a
+      // caller their input was uniform - and every paid ceiling except Pro's
+      // 25 is even. The engine counts the caller's own cells back now, so a
+      // degenerate input says so before the verdict does.
+      if (result.degenerate) {
+        const all = result.input_ones === 0 ? "0" : "1";
+        text += `> **Every cell in this matrix is ${all}.** At even dimensions the families can return the same verdict for an all-0 and an all-1 matrix, so read the agreement below with that in mind.\n\n`;
+      }
+      if (result.input_ones !== undefined && result.cells !== undefined) {
+        const pct = ((result.input_ones / result.cells) * 100).toFixed(1);
+        text += `**Your matrix:** ${result.input_ones} of ${result.cells} cells set (${pct}%)\n\n`;
+      }
       text += `**Agreement:** ${agreement}\n\n`;
       text += `| Family | Bit | Tie-broken |\n|--------|-----|------------|\n`;
       for (const f of result.families) {
