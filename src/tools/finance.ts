@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import type { Server } from "./helpers.js";
-import { formatResult, directionalBias, distributionBias, concentrationBias, clampD } from "./helpers.js";
+import { formatResult, directionalBias, distributionBias, concentrationBias, clampD, distributionFairness } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
 import { ainScale, fmtAin } from "../ain-format.js";
@@ -69,7 +69,28 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
         const result = await client.compute({ d, bias, samples: 2000 });
         const ain = ainScale(result.ain);
 
-        let text = `## Portfolio Balance — AIN ${fmtAin(ain)}/100\n\n`;
+        // AUDIT 2026-07-31: the verdict and the headline both read `ain`, and
+        // the ordering was backwards. Measured against the live engine:
+        //
+        //   25/25/25/25  (maximally diversified) -> AIN  0.00  "High
+        //                                            concentration risk —
+        //                                            portfolio heavily skewed."
+        //   50/20/20/10  (mild concentration)    -> AIN 60.20  "Some
+        //                                            concentration risk."
+        //   97/ 1/ 1/ 1  (one asset IS the       -> AIN 43.70  "Some
+        //                 portfolio)                 concentration risk."
+        //
+        // The most diversified portfolio scored worst, and a 97% single-asset
+        // position scored milder than it. Same cause as zpl_model_bias: see the
+        // note above distributionFairness in helpers.ts. concentrationBias is 0
+        // for a perfectly even split, and 0 handed to the engine's density
+        // parameter collapses the reading.
+        //
+        // This one is about somebody's money, so it says plainly what it
+        // measured and from what.
+        const fair = distributionFairness(weights);
+        let text = `## Portfolio Balance — diversification ${fair.fairness.toFixed(1)}/100\n\n`;
+        text += `**Engine AIN:** ${fmtAin(ain)}/100 (${result.ain_status}) — the engine's own reading, not the diversification above.\n\n`;
         text += `| Asset | Weight | ${allocations[0].return_pct !== undefined ? "Return |" : ""}\n`;
         text += `|-------|--------|${allocations[0].return_pct !== undefined ? "--------|" : ""}\n`;
         for (const a of allocations) {
@@ -80,11 +101,19 @@ export function registerFinanceTools(server: Server, getClient: () => ZPLEngineC
 
         const topWeight = Math.max(...weights);
         const topAsset = allocations.find((a) => a.weight === topWeight)!;
-        text += `\n**Concentration:** ${topAsset.asset} dominates at ${topWeight.toFixed(1)}%\n`;
-        text += `**Status:** ${result.ain_status} | **Tokens:** ${result.tokens_used}`;
+        // "dominates" was unconditional, so an equal-weight portfolio was told
+        // "A1 dominates at 25.0%". A holding only dominates if it is actually
+        // larger than an even share would be.
+        const evenShare = weights.reduce((s, w) => s + w, 0) / weights.length;
+        text +=
+          topWeight > evenShare * 1.05
+            ? `\n**Largest holding:** ${topAsset.asset} at ${topWeight.toFixed(1)}% (an even split would be ${evenShare.toFixed(1)}%)\n`
+            : `\n**Largest holding:** ${topAsset.asset} at ${topWeight.toFixed(1)}% — no position stands out\n`;
+        text += `**Tokens:** ${result.tokens_used}`;
 
-        if (ain >= 70) text += `\n\n*Portfolio is well-diversified.*`;
-        else if (ain >= 40) text += `\n\n*Some concentration risk — consider rebalancing.*`;
+        if (fair.band === "fair") text += `\n\n*Portfolio is well-diversified.*`;
+        else if (fair.band === "tiered") text += `\n\n*Some concentration risk — consider rebalancing.*`;
+        else if (fair.band === "harsh") text += `\n\n*Marked concentration — a few positions carry most of the portfolio.*`;
         else text += `\n\n*High concentration risk — portfolio heavily skewed.*`;
 
         addHistory({ tool: "zpl_portfolio", domain: "finance", results: { allocations, tokens_used: result.tokens_used }, ain_scores: { portfolio: ain } });

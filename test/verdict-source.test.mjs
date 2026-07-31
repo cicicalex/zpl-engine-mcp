@@ -71,7 +71,9 @@ const KNOWN_INVERTED = [
   "crypto.ts:zpl_tokenomics",
   "crypto.ts:zpl_whale_check",
   "eval.ts:zpl_language_equity",
-  "finance.ts:zpl_portfolio",
+  // finance.ts:zpl_portfolio converted 2026-07-31 — measured 25/25/25/25 at
+  // AIN 0.00 "heavily skewed" and 97/1/1/1 at AIN 43.70 "some concentration
+  // risk"; now 100.0 and 4.0 diversification respectively.
   "gaming.ts:zpl_rng_test",
   "security.ts:zpl_risk_score",
   "security.ts:zpl_vuln_map",
