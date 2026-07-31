@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 import type { Server } from "./helpers.js";
-import { distributionBias, clampD, ainSignal, maybeRedactForPureMode } from "./helpers.js";
+import { distributionBias, clampD, ainSignal, maybeRedactForPureMode , distributionFairness } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
 import { ainScale, fmtAin } from "../ain-format.js";
@@ -105,13 +105,33 @@ export function registerCertificationTools(server: Server, getClient: () => ZPLE
         args_a.forEach((a, i) => { text += `${i + 1}. ${a}\n`; });
         text += `\n### ${side_b}\n`;
         args_b.forEach((a, i) => { text += `${i + 1}. ${a}\n`; });
+        // AUDIT 2026-07-31: this verdict read `ain`, derived from
+        // distributionBias — the same inversion corrected across the other
+        // tools today, and the last one found because it is written as a
+        // ternary rather than an if, which the first scan did not match.
+        //
+        // What the tool actually measures is worth stating plainly, because it
+        // is less than the word "debate" suggests: argument strength here is
+        // word count divided by three, capped at ten. That is a proxy for
+        // length, not for quality, and a short decisive point scores below a
+        // long rambling one. Balance is now computed from those lengths
+        // directly, and the output no longer implies it judged the reasoning.
+        const strengthA = scoresA.reduce((s, v) => s + v, 0);
+        const strengthB = scoresB.reduce((s, v) => s + v, 0);
+        const balance = distributionFairness([strengthA, strengthB]);
+        const heavier = strengthA === strengthB ? null : strengthA > strengthB ? side_a : side_b;
+
         text += `\n---\n`;
-        text += `**Debate Balance AIN: ${fmtAin(ain)}/100 (${ainSignal(ain)})**\n`;
-        text += ain >= 70
-          ? `Both sides are well-represented. This is a fair debate.\n`
-          : ain >= 40
-          ? `One side has stronger arguments. Consider strengthening the weaker side.\n`
-          : `This debate is heavily one-sided. Major rebalancing needed.\n`;
+        text += `**Debate balance: ${balance.fairness.toFixed(1)}/100** — measured from how much text each side got.\n`;
+        text += `**Engine AIN:** ${fmtAin(ain)}/100 (${ainSignal(ain)}) — the engine's own reading, not the balance above.\n`;
+        text += `\n**Arguments:** ${side_a} ${args_a.length}, ${side_b} ${args_b.length}\n`;
+        text +=
+          balance.band === "fair"
+            ? `Both sides are given comparable space. This is a fair debate by length.\n`
+            : balance.band === "tiered"
+            ? `${heavier} is given noticeably more space. Consider strengthening the other side.\n`
+            : `This debate is heavily one-sided — ${heavier} takes most of the text. Major rebalancing needed.\n`;
+        text += `\n*Measured on length only. A side can be brief and still right.*\n`;
         text += `\nTokens: ${result.tokens_used}`;
 
         addHistory({ tool: "zpl_debate", results: { topic, tokens_used: result.tokens_used }, ain_scores: { debate: ain } });

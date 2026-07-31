@@ -67,10 +67,11 @@ const LOCAL_MEASURE =
  * tool is converted; adding one requires a very good reason.
  */
 const KNOWN_INVERTED = [
-  "certification.ts:zpl_debate",
+  // Empty as of 2026-07-31. Every tool that took its verdict from a
+  // distance-from-uniform measure has been converted. The list stays, and the
+  // assertion stays equality, so the next one to appear fails here.
   // crypto.ts:zpl_whale_check and zpl_tokenomics converted 2026-07-31 - both
   // needed a domain measure rather than a fairness one; see helpers.ts.
-  "eval.ts:zpl_language_equity",
   // finance.ts:zpl_portfolio converted 2026-07-31 — measured 25/25/25/25 at
   // AIN 0.00 "heavily skewed" and 97/1/1/1 at AIN 43.70 "some concentration
   // risk"; now 100.0 and 4.0 diversification respectively.
@@ -104,10 +105,25 @@ async function toolBodies() {
   return found;
 }
 
+/**
+ * AUDIT 2026-07-31, second pass: this used to read
+ *
+ *   SYMMETRIC_MEASURE && VERDICT_ON_AIN && !LOCAL_MEASURE
+ *
+ * which asks whether the body *mentions* a local measure anywhere, not whether
+ * the verdict uses one. Proving it on the empty list caught the hole: putting
+ * zpl_debate's verdict back to `ain >= 70` changed nothing, because the
+ * `const balance = distributionFairness(...)` line two rows above still
+ * satisfied the exemption. A guard that reports green on the exact defect it
+ * was written for is worse than no guard.
+ *
+ * The exemption is gone. Once a tool is converted it has no reason to compare
+ * AIN against a threshold at all — displaying AIN is fine, deciding on it is
+ * not — so the rule is simply: a symmetric measure and an AIN threshold in the
+ * same tool.
+ */
 function isInverted({ body }) {
-  return (
-    SYMMETRIC_MEASURE.test(body) && VERDICT_ON_AIN.test(body) && !LOCAL_MEASURE.test(body)
-  );
+  return SYMMETRIC_MEASURE.test(body) && VERDICT_ON_AIN.test(body);
 }
 
 test("tool bodies were actually parsed", async () => {
@@ -195,7 +211,21 @@ test("the detector catches the shape that shipped and spares the fix", () => {
     const fair = distributionFairness(counts);
     if (fair.band === "fair") text += "well-distributed";
   `;
-  assert.ok(!isInverted({ body: fixed }), "must spare a tool that uses a local measure");
+  assert.ok(!isInverted({ body: fixed }), "must spare a tool whose verdict uses a local measure");
+
+  // The shape that slipped through the first version of this detector: a
+  // converted tool that still decides on AIN. Computing a local measure two
+  // lines above does not make the decision local.
+  const halfConverted = `
+    const bias = distributionBias(counts);
+    const ain = ainScale(result.ain);
+    const fair = distributionFairness(counts);
+    if (ain >= 70) text += "well-distributed";
+  `;
+  assert.ok(
+    isInverted({ body: halfConverted }),
+    "a local measure sitting unused beside an AIN threshold must still be caught",
+  );
 
   const noVerdict = `
     const bias = distributionBias(counts);

@@ -483,6 +483,28 @@ export function whaleConcentrationBand(topTotal: number, largest: number): Whale
 }
 
 /**
+ * Languages whose writing does not put spaces between words.
+ *
+ * AUDIT 2026-07-31: zpl_language_equity measures how equal response lengths are
+ * across languages, and derives length with `text.split(/\s+/).length`. For
+ * Chinese, Japanese, Thai and Lao that returns roughly 1 for an entire
+ * paragraph, because the script does not separate words with spaces. Those
+ * languages therefore always look drastically shorter than the others, and the
+ * tool would report severe bias against them no matter what the model did.
+ *
+ * A word count is not comparable across scripts, and picking the unit that
+ * makes it comparable is a product decision rather than a bug fix — noted for
+ * Alex. What is not a decision is telling the reader, so the tool now says so
+ * when one of these languages is in the run instead of quietly reporting an
+ * artefact as a finding.
+ */
+export const SPACELESS_SCRIPTS = new Set(["zh", "ja", "th", "lo", "km", "my"]);
+
+export function hasSpacelessScript(languages: string[]): string[] {
+  return languages.filter((l) => SPACELESS_SCRIPTS.has(l.toLowerCase().slice(0, 2)));
+}
+
+/**
  * Chi-square goodness-of-fit against a uniform expectation.
  *
  * AUDIT 2026-07-31: zpl_rng_test decided whether an RNG was fair from AIN
