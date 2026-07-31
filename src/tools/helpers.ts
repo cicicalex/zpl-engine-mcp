@@ -483,6 +483,57 @@ export function whaleConcentrationBand(topTotal: number, largest: number): Whale
 }
 
 /**
+ * Severity of the worst thing in a security readout.
+ *
+ * AUDIT 2026-07-31: zpl_vuln_map and zpl_risk_score decided posture from how
+ * *evenly* risk was spread. Measured against the live engine:
+ *
+ *   vuln_map   four components all at CVSS 9.5 -> "Risks are distributed
+ *                                                  evenly - no single point of
+ *                                                  failure."
+ *              one at 9.8, the rest at 1.0     -> same sentence, for what is
+ *                                                  exactly a single point of
+ *                                                  failure
+ *              everything at 1.0               -> "Some components are
+ *                                                  significantly weaker."
+ *
+ *   risk_score all risks 1x1 (trivial)         -> "Risk concentrated in few
+ *                                                  areas"
+ *              all risks 5x5 (all critical)    -> the same sentence, identical
+ *                                                  output for a trivial and a
+ *                                                  catastrophic matrix
+ *              one 5x5, rest 1x1               -> "Risk is spread across areas"
+ *
+ * Evenness is not safety. A system whose every component is critical is
+ * perfectly even and entirely on fire, and the tool congratulated it for
+ * having no single point of failure.
+ *
+ * Both tools already labelled each row by severity, using thresholds printed
+ * in their own output — CVSS 9/7/4 and likelihood x impact 15/10/5. The
+ * posture now comes from the worst row, using those same thresholds, so the
+ * summary cannot contradict the table above it. No new numbers are invented
+ * here: these are the tools' own.
+ */
+export const SEVERITY_BANDS = ["low", "medium", "high", "critical"] as const;
+export type Severity = (typeof SEVERITY_BANDS)[number];
+
+/** CVSS 0-10, using the thresholds zpl_vuln_map already prints per row. */
+export function cvssBand(score: number): Severity {
+  if (score >= 9) return "critical";
+  if (score >= 7) return "high";
+  if (score >= 4) return "medium";
+  return "low";
+}
+
+/** Likelihood x impact, 1-25, using the thresholds zpl_risk_score prints. */
+export function riskMatrixBand(score: number): Severity {
+  if (score >= 15) return "critical";
+  if (score >= 10) return "high";
+  if (score >= 5) return "medium";
+  return "low";
+}
+
+/**
  * How much of a token's supply sits with insiders.
  *
  * AUDIT 2026-07-31: zpl_tokenomics called an 85% insider allocation "Fair

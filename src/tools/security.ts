@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import type { Server } from "./helpers.js";
-import { varianceBias, distributionBias, clampD } from "./helpers.js";
+import { varianceBias, distributionBias, clampD, distributionFairness, cvssBand, riskMatrixBand } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
 import { ainScale, fmtAin } from "../ain-format.js";
@@ -33,24 +33,52 @@ export function registerSecurityTools(server: Server, getClient: () => ZPLEngine
         const ain = ainScale(result.ain);
         const label = system_name ?? "System";
 
+        // AUDIT 2026-07-31: posture came from AIN derived from varianceBias —
+        // a spread measure. See the note above cvssBand in helpers.ts for the
+        // measured before/after; the short version is that four components all
+        // at CVSS 9.5 were told they had no single point of failure.
         const sorted = [...components].sort((a, b) => b.score - a.score);
-        let text = `## ${label} Vulnerability Map — AIN ${fmtAin(ain)}/100\n\n`;
+        const worst = sorted[0];
+        const posture = cvssBand(worst.score);
+        let text = `## ${label} Vulnerability Map — worst component ${worst.score.toFixed(1)} CVSS (${posture.toUpperCase()})\n\n`;
+        text += `**Engine AIN:** ${fmtAin(ain)}/100 — the engine's own reading, not the severity above.\n\n`;
         text += `| Component | CVSS | Risk | ${components[0].count !== undefined ? "Vulns |" : ""}\n`;
         text += `|-----------|------|------|${components[0].count !== undefined ? "-------|" : ""}\n`;
         for (const c of sorted) {
-          const risk = c.score >= 9 ? "CRITICAL" : c.score >= 7 ? "HIGH" : c.score >= 4 ? "MEDIUM" : "LOW";
+          // Same function as the posture above, so a row can never be labelled
+          // CRITICAL under a summary that calls the system healthy.
+          const risk = cvssBand(c.score).toUpperCase();
           text += `| ${c.name} | ${c.score.toFixed(1)} | ${risk} |`;
           if (c.count !== undefined) text += ` ${c.count} |`;
           text += `\n`;
         }
 
-        const critical = sorted.filter((c) => c.score >= 9).length;
-        const high = sorted.filter((c) => c.score >= 7 && c.score < 9).length;
+        const critical = sorted.filter((c) => cvssBand(c.score) === "critical").length;
+        const high = sorted.filter((c) => cvssBand(c.score) === "high").length;
         text += `\n**Summary:** ${critical} critical, ${high} high, ${sorted.length - critical - high} medium/low\n`;
 
-        if (ain >= 60) text += `**Posture:** Risks are distributed evenly — no single point of failure.\n`;
-        else if (ain >= 35) text += `**Posture:** Some components are significantly weaker. Prioritize the top vulnerabilities.\n`;
-        else text += `**Posture:** Risk heavily concentrated in few components. Critical exposure — patch immediately.\n`;
+        if (posture === "critical") text += `**Posture:** Critical exposure — ${critical} component${critical === 1 ? "" : "s"} at CVSS 9 or above. Patch before anything else here.\n`;
+        else if (posture === "high") text += `**Posture:** High exposure. ${high} component${high === 1 ? "" : "s"} in the 7-9 range — prioritise these.\n`;
+        else if (posture === "medium") text += `**Posture:** Moderate exposure. Nothing critical, but the worst component is a real finding.\n`;
+        else text += `**Posture:** Low exposure. No component scores above 4.\n`;
+
+        // Spread is reported as an observation, not as safety. It used to be
+        // the verdict, which is how a system with every component critical was
+        // congratulated for having no single point of failure.
+        //
+        // CVSS starts at 0 and a clean system legitimately scores 0 across the
+        // board. distributionFairness throws on an all-zero input, by design —
+        // there is no distribution to judge — so calling it unguarded would
+        // have made the healthiest possible report the one that errors out.
+        if (scores.some((s) => s > 0)) {
+          const spread = distributionFairness(scores);
+          text +=
+            spread.band === "fair"
+              ? `**Spread:** Scores are close together — this posture is systemic, not one weak link.\n`
+              : `**Spread:** Scores vary widely — ${worst.name} carries much more risk than the rest.\n`;
+        } else {
+          text += `**Spread:** Every component scores 0 — nothing to compare.\n`;
+        }
 
         text += `**Tokens:** ${result.tokens_used}`;
         addHistory({ tool: "zpl_vuln_map", domain: "security", results: { system_name, components: components.map((c) => c.name), tokens_used: result.tokens_used }, ain_scores: { [label]: ain } });
@@ -81,16 +109,35 @@ export function registerSecurityTools(server: Server, getClient: () => ZPLEngine
         const result = await client.compute({ d, bias, samples: 2000 });
         const ain = ainScale(result.ain);
 
-        let text = `## Risk Matrix — AIN ${fmtAin(ain)}/100\n\n`;
+        // AUDIT 2026-07-31: the Distribution line was decided by AIN derived
+        // from distributionBias. An all-1x1 matrix and an all-5x5 matrix
+        // produced identical output — "Risk concentrated in few areas" — and a
+        // matrix with one 5x5 among three 1x1s, which genuinely is
+        // concentrated, read "Risk is spread across areas".
+        //
+        // Two separate statements were collapsed into one: how bad the worst
+        // risk is, and whether the risks resemble each other. They are now
+        // reported separately, the first from the same thresholds the Priority
+        // column already uses.
+        const sorted = risks.map((r, i) => ({ ...r, score: riskScores[i] })).sort((a, b) => b.score - a.score);
+        const worst = sorted[0];
+        const worstBand = riskMatrixBand(worst.score);
+        let text = `## Risk Matrix — worst risk ${worst.score}/25 (${worstBand.toUpperCase()})\n\n`;
+        text += `**Engine AIN:** ${fmtAin(ain)}/100 — the engine's own reading, not the severity above.\n\n`;
         text += `| Risk | Likelihood | Impact | Score | Priority |\n`;
         text += `|------|------------|--------|-------|----------|\n`;
-        const sorted = risks.map((r, i) => ({ ...r, score: riskScores[i] })).sort((a, b) => b.score - a.score);
         for (const r of sorted) {
-          const pri = r.score >= 15 ? "CRITICAL" : r.score >= 10 ? "HIGH" : r.score >= 5 ? "MEDIUM" : "LOW";
-          text += `| ${r.name} | ${r.likelihood} | ${r.impact} | ${r.score} | ${pri} |\n`;
+          text += `| ${r.name} | ${r.likelihood} | ${r.impact} | ${r.score} | ${riskMatrixBand(r.score).toUpperCase()} |\n`;
         }
 
-        text += `\n**Distribution:** ${ain >= 50 ? "Risk is spread across areas" : "Risk concentrated in few areas"}\n`;
+        const worstCount = sorted.filter((r) => riskMatrixBand(r.score) === worstBand).length;
+        text += `\n**Highest priority:** ${worst.name} at ${worst.score}/25`;
+        text += worstCount > 1 ? ` (${worstCount} risks share this band)\n` : `\n`;
+        const spread = distributionFairness(riskScores);
+        text +=
+          spread.band === "fair"
+            ? `**Distribution:** Risk is spread evenly across the areas listed — no single area stands out.\n`
+            : `**Distribution:** Risk is concentrated — ${worst.name} scores well above the rest.\n`;
         text += `**Tokens:** ${result.tokens_used}`;
 
         addHistory({ tool: "zpl_risk_score", domain: "security", results: { risks: risks.map((r) => r.name), tokens_used: result.tokens_used }, ain_scores: { risk: ain } });

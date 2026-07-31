@@ -75,8 +75,9 @@ const KNOWN_INVERTED = [
   // AIN 0.00 "heavily skewed" and 97/1/1/1 at AIN 43.70 "some concentration
   // risk"; now 100.0 and 4.0 diversification respectively.
   "gaming.ts:zpl_rng_test",
-  "security.ts:zpl_risk_score",
-  "security.ts:zpl_vuln_map",
+  // security.ts:zpl_vuln_map and zpl_risk_score converted 2026-07-31 - posture
+  // now comes from the worst finding, using the thresholds those tools already
+  // printed per row.
 ];
 
 async function toolFiles() {

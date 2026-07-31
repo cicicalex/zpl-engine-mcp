@@ -119,3 +119,76 @@ test("the extremes are the extremes", () => {
   assert.equal(insiderShareBand(0), "fair");
   assert.equal(insiderShareBand(100), "majority");
 });
+
+/* -------------------------------------------------------------------------- */
+/*  Security severity                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * zpl_vuln_map and zpl_risk_score decided posture from how evenly risk was
+ * spread. Measured against the live engine, before:
+ *
+ *   four components all at CVSS 9.5 -> "Risks are distributed evenly - no
+ *                                       single point of failure."
+ *   one at 9.8, rest at 1.0         -> the same sentence, for exactly a single
+ *                                       point of failure
+ *   all risks 1x1 and all risks 5x5 -> byte-identical output
+ *
+ * Unlike the whale and insider bands, these thresholds are not invented: CVSS
+ * 9/7/4 and score 15/10/5 are what the tools already printed in their own
+ * per-row Priority column. The band functions exist so the summary and the
+ * rows cannot disagree, and so the ordering is pinned.
+ */
+test("a worse CVSS never reads as safer", async () => {
+  const { cvssBand, SEVERITY_BANDS } = await import("../dist/tools/helpers.js");
+  const rank = (b) => SEVERITY_BANDS.indexOf(b);
+  let prev = -1;
+  for (let s = 0; s <= 10; s += 0.1) {
+    const r = rank(cvssBand(Number(s.toFixed(1))));
+    assert.ok(r >= 0, `unknown band at CVSS ${s}`);
+    assert.ok(r >= prev, `CVSS band went down at ${s.toFixed(1)}`);
+    prev = r;
+  }
+});
+
+test("a worse likelihood-times-impact never reads as safer", async () => {
+  const { riskMatrixBand, SEVERITY_BANDS } = await import("../dist/tools/helpers.js");
+  const rank = (b) => SEVERITY_BANDS.indexOf(b);
+  let prev = -1;
+  for (let s = 1; s <= 25; s++) {
+    const r = rank(riskMatrixBand(s));
+    assert.ok(r >= prev, `risk band went down at ${s}`);
+    prev = r;
+  }
+});
+
+test("the measured security cases land on the right side now", async () => {
+  const { cvssBand, riskMatrixBand } = await import("../dist/tools/helpers.js");
+
+  assert.equal(cvssBand(9.5), "critical", "four components at 9.5 were told they were fine");
+  assert.equal(cvssBand(9.8), "critical", "the single point of failure");
+  assert.equal(cvssBand(1.0), "low");
+  assert.equal(cvssBand(0), "low", "a clean system must not error or read as risky");
+
+  // 1x1 and 5x5 produced identical output before; they must not now.
+  assert.notEqual(riskMatrixBand(1), riskMatrixBand(25), "trivial and catastrophic must differ");
+  assert.equal(riskMatrixBand(25), "critical");
+  assert.equal(riskMatrixBand(1), "low");
+});
+
+test("the row label and the summary come from the same function", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const src = await readFile(
+    new URL("../src/tools/security.ts", import.meta.url),
+    "utf-8",
+  );
+  // The row label used to be an inline ternary on 9/7/4 while the posture came
+  // from somewhere else entirely. A row saying CRITICAL under a summary saying
+  // healthy is the shape being prevented.
+  assert.ok(
+    !/score\s*>=\s*9\s*\?\s*"CRITICAL"/.test(src),
+    "the per-row severity ternary is back — it can drift from the posture above it",
+  );
+  assert.match(src, /cvssBand\(c\.score\)/, "rows must be labelled by cvssBand");
+  assert.match(src, /riskMatrixBand\(r\.score\)/, "risk rows must be labelled by riskMatrixBand");
+});
