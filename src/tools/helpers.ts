@@ -10,13 +10,39 @@ import { ainScale, fmtAin } from "../ain-format.js";
 
 export type Server = McpServer;
 
-/** Standard AIN interpretation bands */
+/**
+ * The engine's own classification of an AIN reading.
+ *
+ * AUDIT 2026-07-31: this was a second, invented set of bands - 80/60/40/20
+ * returning EXCELLENT / GOOD / MODERATE / WEAK / CRITICAL - described in its
+ * own comment as "Standard AIN interpretation bands". It was neither standard
+ * nor the engine's. Measured side by side against ain_status in zpl-core:
+ *
+ *   AIN 85  ->  "EXCELLENT"   engine: NEUTRAL
+ *   AIN 75  ->  "GOOD"        engine: MODERATE_BIAS
+ *   AIN 55  ->  "MODERATE"    engine: SIGNIFICANT_BIAS
+ *   AIN 35  ->  "WEAK"        engine: HIGH_BIAS
+ *
+ * Softer than the engine at every step across the middle of the range, and
+ * printed directly beside the number it was softening - in eight places,
+ * several of which also show the engine's ain_status, so the same reading
+ * carried two verdicts that disagreed.
+ *
+ * The engine already classifies every reading and returns ain_status on every
+ * compute response. There is no second opinion to have. These are its
+ * thresholds and its names.
+ *
+ * Takes the 0-100 display scale this package uses; the engine's thresholds are
+ * on 0-1, so they are stated here multiplied out rather than converted at the
+ * call site, where a stray division would be invisible.
+ */
 export function ainSignal(ain: number): string {
-  if (ain >= 80) return "EXCELLENT";
-  if (ain >= 60) return "GOOD";
-  if (ain >= 40) return "MODERATE";
-  if (ain >= 20) return "WEAK";
-  return "CRITICAL";
+  if (ain >= 96) return "CERTIFIED_NEUTRAL";
+  if (ain >= 90) return "HIGHLY_NEUTRAL";
+  if (ain >= 80) return "NEUTRAL";
+  if (ain >= 60) return "MODERATE_BIAS";
+  if (ain >= 40) return "SIGNIFICANT_BIAS";
+  return "HIGH_BIAS";
 }
 
 /**
