@@ -15,6 +15,7 @@
 import type { ComputeResponse } from "../engine-client.js";
 import type { DomainLens, DomainInterpretation } from "./types.js";
 import { ainScale, fmtAin } from "../ain-format.js";
+import { ainSignal } from "../tools/helpers.js";
 import { clampBias } from "../tools/helpers.js";
 
 /**
@@ -115,12 +116,17 @@ export const universalLens: DomainLens = {
     const ain = ainScale(result.ain);
     const context = (input.context as string) ?? "choice";
 
-    let signal: string;
-    if (ain >= 75) signal = "EXCELLENT_BALANCE";
-    else if (ain >= 55) signal = "GOOD_BALANCE";
-    else if (ain >= 40) signal = "MODERATE";
-    else if (ain >= 25) signal = "IMBALANCED";
-    else signal = "POOR_BALANCE";
+    // AUDIT 2026-07-31: this was a fifth set of bands - 75/55/40/25 returning
+    // EXCELLENT_BALANCE / GOOD_BALANCE / MODERATE / IMBALANCED / POOR_BALANCE -
+    // and it was returned in the same object as result.ain_status. At AIN 75 it
+    // said EXCELLENT_BALANCE while the engine said MODERATE_BIAS; at 55,
+    // GOOD_BALANCE against SIGNIFICANT_BIAS.
+    //
+    // The other five domains translate the reading into their own nouns -
+    // DECENTRALIZED, HIGHLY_STABLE, SECURE - which is a lens, not a re-grade.
+    // This one is the generic domain and had no vocabulary of its own to offer,
+    // only softer adjectives for the same number.
+    const signal = ainSignal(ain);
 
     return {
       summary: `${context}: AIN ${fmtAin(ain)}/100`,

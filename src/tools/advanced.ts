@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 import type { Server } from "./helpers.js";
-import { distributionBias, directionalBias, concentrationBias, clampD, ainSignal, ZPL_DISCLAIMER } from "./helpers.js";
+import { distributionBias, directionalBias, concentrationBias, clampD, ainSignal, ZPL_DISCLAIMER, tokenCostTable } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory, getHistory, estimateOpTokens } from "../store.js";
 import { ainScale, fmtAin } from "../ain-format.js";
@@ -463,23 +463,20 @@ Built by Zero Point Logic — published on Zenodo with DOI.`,
 
         "scoring-guide": `## AIN Scoring Guide (0-100 display scale; the engine returns 0.0-1.0 with 6 decimals)
 
-| Score | Grade | Meaning |
-|-------|-------|---------|
-| 90-100 | A+ | EXCEPTIONAL — Perfect or near-perfect neutrality |
-| 80-89 | A | EXCELLENT — Very well balanced |
-| 70-79 | B+ | GOOD — Well balanced with minor deviations |
-| 60-69 | B | ACCEPTABLE — Functional balance, some asymmetry |
-| 40-59 | C | MODERATE — Noticeable imbalance, needs attention |
-| 20-39 | D | WEAK — Significant bias, action needed |
-| 0-19 | F | CRITICAL — Extreme bias, system is broken |
+| Score | ain_status | Meaning |
+|-------|------------|---------|
+| 96-100 | CERTIFIED_NEUTRAL | Near-perfect neutrality |
+| 90-95 | HIGHLY_NEUTRAL | Strongly balanced |
+| 80-89 | NEUTRAL | Balanced |
+| 60-79 | MODERATE_BIAS | Noticeable imbalance |
+| 40-59 | SIGNIFICANT_BIAS | Substantial imbalance |
+| 0-39 | HIGH_BIAS | Severe imbalance |
+
+These are the engine's own bands, returned as \`ain_status\` on every compute
+response. Nothing here re-grades them.
 
 **Token cost (tiered by dimension):**
-- d=3–5: 1 token
-- d=6–9: 2 tokens
-- d=10–16: 5 tokens
-- d=17–25: 15 tokens
-- d=26–32: 40 tokens
-- d=33–48: 150 tokens
+${tokenCostTable()}
 
 **Sweep:** 19× the single compute cost (tests all bias levels)`,
 

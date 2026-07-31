@@ -117,3 +117,79 @@ test("the pinned bands match the engine's source", async () => {
     "the engine's bands changed and this package's copy did not follow",
   );
 });
+
+/**
+ * The scoring guide teaches the scale. It must teach the engine's.
+ *
+ * AUDIT 2026-07-31: zpl_teach's scoring-guide carried a third set of bands -
+ * letter grades over 90/80/70/60/40/20 with wording to match. Measured against
+ * the engine:
+ *
+ *   AIN 85 -> "A EXCELLENT, very well balanced"   engine: NEUTRAL
+ *   AIN 75 -> "B+ GOOD, minor deviations"         engine: MODERATE_BIAS
+ *   AIN 45 -> "C MODERATE, noticeable imbalance"  engine: SIGNIFICANT_BIAS
+ *   AIN 30 -> "D WEAK"                            engine: HIGH_BIAS
+ *
+ * Softer than the engine at every step, in the one document whose job is
+ * telling a reader - often an AI - what the numbers mean.
+ *
+ * The same block listed token costs and stopped at d=33-48, omitting d=49-64
+ * and d=65+. Anyone on Enterprise or Enterprise XL found no line for their
+ * range. It renders from tokenCostTable() now, so the bands cannot go stale.
+ */
+test("the scoring guide teaches the engine's bands", async () => {
+  const { registerAdvancedTools } = await import("../dist/tools/advanced.js");
+  const tools = new Map();
+  registerAdvancedTools({ tool: (n, _d, _s, h) => tools.set(n, h) }, () => {
+    throw new Error("the guide must not need the engine");
+  });
+
+  const text = (await tools.get("zpl_teach")({ topic: "scoring-guide" })).content[0].text;
+
+  for (const [, name] of ENGINE_BANDS) {
+    assert.ok(text.includes(name), `the guide does not mention ${name}`);
+  }
+  for (const invented of ["EXCEPTIONAL", "EXCELLENT", "ACCEPTABLE", "WEAK"]) {
+    assert.ok(
+      !text.includes(invented),
+      `"${invented}" is not an engine band — the guide is teaching a second scale`,
+    );
+  }
+
+  // The cost table was truncated; the top two bands are the ones paid for.
+  assert.match(text, /d=49–64 → 500 tokens/, "the d=49-64 cost band must be listed");
+  assert.match(text, /d=65\+ → 2000 tokens/, "the open-ended cost band must be listed");
+});
+
+test("the universal domain does not re-grade the engine", async () => {
+  const { getDomain } = await import("../dist/domains/index.js");
+  const universal = getDomain("universal");
+  assert.ok(universal, "universal domain not found");
+
+  const status = (a) => ENGINE_BANDS.find(([lo]) => a >= lo)[1];
+  const disagreements = [];
+  for (const pct of [98, 92, 85, 75, 65, 55, 45, 30, 10]) {
+    const r = universal.interpret(
+      {
+        ain: pct / 100,
+        ain_status: status(pct / 100),
+        p_output: 0.5,
+        deviation: 0,
+        status: "STABLE",
+        samples: 1,
+        d: 3,
+        bias: 0.5,
+        tokens_used: 1,
+        compute_ms: 1,
+      },
+      {},
+    );
+    if (r.signal !== r.status) disagreements.push(`AIN ${pct}: signal ${r.signal} vs ${r.status}`);
+  }
+  assert.deepEqual(
+    disagreements,
+    [],
+    `the universal domain returns its signal and the engine's status in one object; ` +
+      `they must not contradict:\n  ${disagreements.join("\n  ")}`,
+  );
+});
