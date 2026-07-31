@@ -15,11 +15,37 @@ import { dirname, join } from "node:path";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
+/**
+ * How long to wait for a spawned MCP process before calling it hung.
+ *
+ * AUDIT 2026-07-31: every spawn here used 5000ms, and three of them failed
+ * intermittently under `npm test` while passing in isolation. Measured:
+ *
+ *   in isolation                    ~555ms
+ *   under 8 busy CPU-bound siblings ~784ms
+ *   during a passing full suite     524-1021ms
+ *   the failures                    5025, 5072, 5202ms
+ *
+ * Those last three are the timeout firing, not the work taking longer. Both
+ * failure clusters landed immediately after `npm run build` rewrote dist/,
+ * which on Windows means the first spawn touches files a virus scanner has not
+ * seen yet.
+ *
+ * 5 seconds is too tight a bound for "did this hang?" when the normal case is
+ * under one. A generous timeout costs nothing while tests pass - spawnSync
+ * returns as soon as the child exits - and only matters when something is
+ * genuinely stuck, where 30s still fails long before anyone gives up on CI.
+ *
+ * A suite that fails once in three runs for no reason is worse than a slow one:
+ * it teaches people to re-run instead of read.
+ */
+const SPAWN_TIMEOUT_MS = 30_000;
+
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const MCP = join(ROOT, "dist", "index.js");
 
 /** Spawn the MCP and capture stderr output, then kill. Used for boot-time errors. */
-function runWithEnv(extraEnv, timeoutMs = 5000) {
+function runWithEnv(extraEnv, timeoutMs = SPAWN_TIMEOUT_MS) {
   const env = { ...process.env, ...extraEnv };
   // Wipe key-related env so the MCP exercises the "no key" path.
   if (extraEnv.WIPE_KEY) {
@@ -43,7 +69,7 @@ test("--help exits 0 with usage text", () => {
   const r = spawnSync(process.execPath, [MCP, "--help"], {
     cwd: ROOT,
     encoding: "utf-8",
-    timeout: 5000,
+    timeout: SPAWN_TIMEOUT_MS,
   });
   assert.equal(r.status, 0);
   assert.match(r.stdout, /Usage:/);
@@ -56,7 +82,7 @@ test("--version prints just the version number + newline", () => {
   const r = spawnSync(process.execPath, [MCP, "--version"], {
     cwd: ROOT,
     encoding: "utf-8",
-    timeout: 5000,
+    timeout: SPAWN_TIMEOUT_MS,
   });
   assert.equal(r.status, 0);
   assert.match(r.stdout.trim(), /^\d+\.\d+\.\d+$/);
@@ -66,7 +92,7 @@ test("-v shorthand also works", () => {
   const r = spawnSync(process.execPath, [MCP, "-v"], {
     cwd: ROOT,
     encoding: "utf-8",
-    timeout: 5000,
+    timeout: SPAWN_TIMEOUT_MS,
   });
   assert.equal(r.status, 0);
   assert.match(r.stdout.trim(), /^\d+\.\d+\.\d+$/);
@@ -76,7 +102,7 @@ test("-h shorthand also works", () => {
   const r = spawnSync(process.execPath, [MCP, "-h"], {
     cwd: ROOT,
     encoding: "utf-8",
-    timeout: 5000,
+    timeout: SPAWN_TIMEOUT_MS,
   });
   assert.equal(r.status, 0);
   assert.match(r.stdout, /Usage:/);
@@ -90,26 +116,26 @@ test("ZPL_RATE_LIMIT=-1 doesn't disable rate limiter (clamped to safe minimum)",
   // Module-level constant, can't introspect from another process. Smoke-test
   // by calling whoami which doesn't hit the engine — server should boot OK
   // without the rate limiter going haywire.
-  const r = runWithEnv({ ZPL_RATE_LIMIT: "-1" }, 5000);
+  const r = runWithEnv({ ZPL_RATE_LIMIT: "-1" }, SPAWN_TIMEOUT_MS);
   // No crash on boot is the win.
   assert.ok(r.status === 0 || r.stdout.includes("Logged in") || r.stdout.includes("Not logged in"),
     `Expected clean boot, got status=${r.status} stderr=${r.stderr.slice(0, 200)}`);
 });
 
 test("ZPL_RATE_LIMIT=999999999 is bounded to safe max", async () => {
-  const r = runWithEnv({ ZPL_RATE_LIMIT: "999999999" }, 5000);
+  const r = runWithEnv({ ZPL_RATE_LIMIT: "999999999" }, SPAWN_TIMEOUT_MS);
   assert.ok(r.status === 0 || r.stdout.includes("Logged in") || r.stdout.includes("Not logged in"),
     `Expected clean boot, got status=${r.status} stderr=${r.stderr.slice(0, 200)}`);
 });
 
 test("ZPL_MAX_RETRIES=999 is bounded to safe max (no retry storm)", async () => {
-  const r = runWithEnv({ ZPL_MAX_RETRIES: "999" }, 5000);
+  const r = runWithEnv({ ZPL_MAX_RETRIES: "999" }, SPAWN_TIMEOUT_MS);
   assert.ok(r.status === 0 || r.stdout.includes("Logged in") || r.stdout.includes("Not logged in"),
     `Expected clean boot, got status=${r.status} stderr=${r.stderr.slice(0, 200)}`);
 });
 
 test("ZPL_RATE_LIMIT='not-a-number' falls back to default", async () => {
-  const r = runWithEnv({ ZPL_RATE_LIMIT: "garbage" }, 5000);
+  const r = runWithEnv({ ZPL_RATE_LIMIT: "garbage" }, SPAWN_TIMEOUT_MS);
   assert.ok(r.status === 0 || r.stdout.includes("Logged in") || r.stdout.includes("Not logged in"));
 });
 
@@ -143,7 +169,7 @@ test("setup --force with totally empty TMPDIR-as-HOME doesn't crash", async () =
       cwd: ROOT,
       env: { ...process.env, HOME: dir, USERPROFILE: dir },
       encoding: "utf-8",
-      timeout: 5000,
+      timeout: SPAWN_TIMEOUT_MS,
     });
     // Should print "Not logged in" gracefully.
     // Note: on Windows, HOME isn't always honoured for homedir() so the real
