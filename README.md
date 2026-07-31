@@ -8,7 +8,7 @@ Connects any MCP-compatible AI client (Claude Desktop, Claude Code, Cursor, Wind
 
 ## What's new in v4.0.0 (MAJOR RELEASE)
 
-Two months of incremental work consolidated. **21 bugs fixed**, **259 tests** (210 unit + 49 live MCP integration), **Windows + Linux verified**. Backwards compatible — legacy `zpl_u_<48hex>` keys still work, all 69 tools keep the same input shape.
+Two months of incremental work consolidated. **21 bugs fixed**, **260 tests** (211 unit + 49 live MCP integration), **Windows + Linux verified**. Backwards compatible — legacy `zpl_u_<48hex>` keys still work, all 69 tools keep the same input shape.
 
 ### New commands
 - **`npx zpl-engine-mcp setup`** — now memory-aware. Detects existing config and offers keep / re-setup / patch-only instead of forcing a fresh login. `--force` bypasses.
@@ -268,7 +268,7 @@ All paid plans offer **20% discount with annual billing**.
 | Pro | $29/mo | $23/mo | d=25 | 50,000 | 3 |
 | GamePro | $69/mo | $55/mo | d=32 | 150,000 | 5 |
 | Studio | $149/mo | $119/mo | d=48 | 500,000 | 10 |
-| Agent | $199/mo | $159/mo | d=48 | 2,000,000 | 15 |
+| Agent | $199/mo | $159/mo | d=48 | 2,000,000 | 50 |
 | Enterprise | $499/mo | $399/mo | d=64 | 10,000,000 | 25 |
 | Enterprise XL | $999/mo | $799/mo | d=100 | 50,000,000 | 50 |
 
