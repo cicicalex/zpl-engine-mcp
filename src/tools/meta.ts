@@ -323,7 +323,38 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
 
       const allEqual = values.length > 1 && values.every((v) => v === values[0]);
       if (allEqual && values[0] !== 0) {
-        warnings.push(`All values equal (${values[0]}). AIN will be near maximum stability — possibly trivial input.`);
+        // AUDIT 2026-07-31: this said "AIN will be near maximum stability".
+        // Measured end to end against the live engine at d=9, samples=50000,
+        // taking each distribution through distributionBias — the conversion
+        // this package documents:
+        //
+        //   0.25 / 0.25 / 0.25 / 0.25  -> bias 0.00 -> ain 0.000  HIGH_BIAS
+        //   0.30 / 0.25 / 0.25 / 0.20  -> bias 0.05 -> ain 0.995  CERTIFIED_NEUTRAL
+        //   0.55 / 0.20 / 0.15 / 0.10  -> bias 0.30 -> ain 0.887  NEUTRAL
+        //   0.97 / 0.01 / 0.01 / 0.01  -> bias 0.72 -> ain 0.954  HIGHLY_NEUTRAL
+        //
+        // The prediction was exactly inverted: the one input it called
+        // near-maximum is the only one that reaches the floor, and the most
+        // lopsided distribution scores higher than the fair one.
+        //
+        // This is the same scale collision the verdict tools were purged of on
+        // 2026-07-30 — distance from uniform handed to a density parameter,
+        // where 0 means an all-zeros matrix. It survived here because this tool
+        // makes a PREDICTION rather than returning a verdict, so the
+        // verdict-source guard never covered it.
+        //
+        // Nothing predicts AIN now. This tool cannot know which conversion a
+        // downstream tool will apply, and on the sampled path the response is
+        // not monotonic in fairness anyway, so any prediction it makes is a
+        // guess dressed as guidance. What it can say is what is true of the
+        // input itself.
+        warnings.push(
+          `All values equal (${values[0]}). Nothing here varies, so any measure of ` +
+            `spread reads zero — and tools that convert a distribution by its ` +
+            `distance from uniform will send the engine its lowest input, not its ` +
+            `highest. A fair-looking distribution does not imply a high result here. ` +
+            `Run it and read what comes back.`,
+        );
       }
 
       const ok = errors.length === 0;
