@@ -353,7 +353,22 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
   // --- zpl_batch: run multiple computations at once ---
   server.tool(
     "zpl_batch",
-    "Run multiple ZPL Engine computations in a single call. Provide an array of (d, bias) pairs. Returns all AIN scores. Efficient for bulk analysis. Max 50 jobs per call.",
+    // AUDIT 2026-07-31: this said "Efficient for bulk analysis". It is not.
+    // The handler below is a sequential for-loop that awaits one /compute per
+    // job, so 50 jobs are 50 round-trips one after another - the same requests
+    // the caller would have made, in the same order, at the same total cost.
+    // There is no batching, no concurrency and no token saving to be had.
+    //
+    // The claim is corrected rather than made true. Firing 50 concurrent
+    // requests would change the load this puts on the engine, and there is no
+    // per-plan concurrency limit on the server to absorb it - so that is a
+    // capacity decision, not a wording fix, and not one to make hours before a
+    // deploy. What the tool genuinely offers is one call instead of fifty and
+    // one collected table, which is worth having and is what it now says.
+    "Run multiple ZPL Engine computations from one tool call. Provide an array of (d, bias) pairs. " +
+      "Returns all AIN scores in a single table. Issues one engine request per job, in sequence: " +
+      "this saves you the bookkeeping, not time or tokens - the cost is the sum of the individual " +
+      "jobs. Max 50 jobs per call.",
     {
       jobs: z.array(z.object({
         label: z.string().max(200).describe("Label for this computation"),
