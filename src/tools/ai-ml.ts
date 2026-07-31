@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import type { Server } from "./helpers.js";
-import { distributionBias, concentrationBias, clampD } from "./helpers.js";
+import { distributionBias, concentrationBias, clampD, distributionFairness } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
 import { ainScale, fmtAin } from "../ain-format.js";
@@ -35,7 +35,16 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
         const total = counts.reduce((s, v) => s + v, 0);
         const label = model_name ?? "Model";
 
-        let text = `## ${label} Bias — AIN ${fmtAin(ain)}/100\n\n`;
+        // AUDIT 2026-07-31: the headline was the AIN, which is the number the
+        // verdict below stopped trusting. Left there, the fixed tool printed
+        // "AIN 0.00/100" directly above "well-distributed" for a 50/50 split —
+        // trading an inverted verdict for a self-contradicting one, since the
+        // headline is what gets read. It now leads with the measure the verdict
+        // actually uses, and AIN is reported plainly as the separate reading it
+        // is.
+        const fair = distributionFairness(counts);
+        let text = `## ${label} Bias — class balance ${fair.fairness.toFixed(1)}/100\n\n`;
+        text += `**Engine AIN:** ${fmtAin(ain)}/100 — the engine's own reading, not the class balance.\n\n`;
         text += `| Class | Predictions | Share | ${predictions[0].avg_confidence !== undefined ? "Confidence |" : ""}\n`;
         text += `|-------|-------------|-------|${predictions[0].avg_confidence !== undefined ? "------------|" : ""}\n`;
         for (const p of predictions) {
@@ -44,8 +53,26 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
           text += `\n`;
         }
 
-        if (ain >= 70) text += `\n**Verdict:** Model predictions are well-distributed. No significant class bias.\n`;
-        else if (ain >= 40) text += `\n**Verdict:** Some prediction skew. Model favors certain classes — review training data balance.\n`;
+        // AUDIT 2026-07-31: these bands read `ain`, and the verdict came out
+        // exactly inverted. Measured against the live engine:
+        //
+        //   500 / 500  (perfectly balanced) -> AIN 0/100  "Severe prediction bias"
+        //   990 /  10  (99:1)               -> AIN 87/100 "well-distributed"
+        //
+        // Same cause as the loot-table inversion fixed on 2026-07-30, in a file
+        // that already carried the diagnosis: distributionBias measures
+        // distance from uniform, 0 meaning perfectly even, and it was handed to
+        // the engine's density parameter, where 0 means an all-zeros matrix and
+        // the reading collapses. Balanced input therefore looked degenerate,
+        // and a skewed one landed mid-range where scores are high. For two
+        // classes the mapping is monotonically backwards.
+        //
+        // The verdict now comes from the class counts, measured locally and
+        // deterministically. AIN is still shown, because it is a real reading —
+        // of something else.
+        if (fair.band === "fair") text += `\n**Verdict:** Model predictions are well-distributed. No significant class bias.\n`;
+        else if (fair.band === "tiered") text += `\n**Verdict:** Some prediction skew. Model favors certain classes — review training data balance.\n`;
+        else if (fair.band === "harsh") text += `\n**Verdict:** Marked prediction skew. A minority of classes takes most of the predictions.\n`;
         else text += `\n**Verdict:** Severe prediction bias. Model is effectively ignoring minority classes. Retrain with balanced data.\n`;
 
         if (threshold !== undefined) text += `**Threshold:** ${threshold}\n`;
@@ -82,7 +109,11 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
         const label = dataset_name ?? "Dataset";
 
         const sorted = [...classes].sort((a, b) => b.samples - a.samples);
-        let text = `## ${label} Balance — AIN ${fmtAin(ain)}/100\n\n`;
+        // Headline leads with the measure the verdict uses — see the note in
+        // zpl_model_bias above for why AIN cannot be the headline here.
+        const fair = distributionFairness(counts);
+        let text = `## ${label} Balance — class balance ${fair.fairness.toFixed(1)}/100\n\n`;
+        text += `**Engine AIN:** ${fmtAin(ain)}/100 — the engine's own reading, not the class balance.\n\n`;
         text += `**Total samples:** ${total.toLocaleString()} | **Classes:** ${classes.length}\n\n`;
         text += `| Class | Samples | Share |\n|-------|---------|-------|\n`;
         for (const c of sorted) {
@@ -92,8 +123,17 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
         const ratio = Math.max(...counts) / Math.max(1, Math.min(...counts));
         text += `\n**Imbalance ratio:** ${ratio.toFixed(1)}:1 (largest/smallest)\n`;
 
-        if (ain >= 70) text += `**Verdict:** Dataset is well-balanced. Training should produce fair predictions.\n`;
-        else if (ain >= 40) text += `**Verdict:** Moderate imbalance. Consider oversampling minority classes or using weighted loss.\n`;
+        // AUDIT 2026-07-31: same inversion as zpl_model_bias above — see the
+        // note there for the measured before/after. concentrationBias is also a
+        // distance-from-even measure, so a balanced dataset drove the engine's
+        // density to zero and scored as severe imbalance.
+        //
+        // The imbalance ratio printed directly above was always correct, which
+        // made the contradiction visible in the tool's own output: a 1.0:1
+        // ratio sat one line above "Severe imbalance".
+        if (fair.band === "fair") text += `**Verdict:** Dataset is well-balanced. Training should produce fair predictions.\n`;
+        else if (fair.band === "tiered") text += `**Verdict:** Moderate imbalance. Consider oversampling minority classes or using weighted loss.\n`;
+        else if (fair.band === "harsh") text += `**Verdict:** Marked imbalance. Minority classes are thin enough to hurt recall — weight the loss or resample.\n`;
         else text += `**Verdict:** Severe imbalance. Model will be biased. Use SMOTE, class weights, or undersample majority.\n`;
 
         text += `**Tokens:** ${result.tokens_used}`;
@@ -126,7 +166,10 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
         const result = await client.compute({ d, bias, samples: 2000 });
         const ain = ainScale(result.ain);
 
-        let text = `## Prompt Consistency — AIN ${fmtAin(ain)}/100\n\n`;
+        // Headline leads with the measure the verdict uses — see zpl_model_bias.
+        const fair = distributionFairness(counts);
+        let text = `## Prompt Consistency — response spread ${fair.fairness.toFixed(1)}/100\n\n`;
+        text += `**Engine AIN:** ${fmtAin(ain)}/100 — the engine's own reading, not the response spread.\n\n`;
         if (prompt_description) text += `**Prompt:** ${prompt_description}\n`;
         text += `**Total runs:** ${total_runs}\n\n`;
         text += `| Response | Count | Rate |\n|----------|-------|------|\n`;
@@ -134,8 +177,12 @@ export function registerAIMLTools(server: Server, getClient: () => ZPLEngineClie
           text += `| ${r.category} | ${r.count} | ${((r.count / total_runs) * 100).toFixed(1)}% |\n`;
         }
 
-        if (ain >= 70) text += `\n**Verdict:** Responses are well-distributed. Model shows no strong bias on this prompt.\n`;
-        else if (ain >= 40) text += `\n**Verdict:** Some response preference detected. Model leans toward certain answers.\n`;
+        // AUDIT 2026-07-31: same inversion as the two tools above. A prompt
+        // answered evenly across categories — the definition of unbiased here —
+        // drove the engine's density to zero and was reported as strong bias.
+        if (fair.band === "fair") text += `\n**Verdict:** Responses are well-distributed. Model shows no strong bias on this prompt.\n`;
+        else if (fair.band === "tiered") text += `\n**Verdict:** Some response preference detected. Model leans toward certain answers.\n`;
+        else if (fair.band === "harsh") text += `\n**Verdict:** Marked preference. Most runs land on a small number of answers.\n`;
         else text += `\n**Verdict:** Strong bias. Model consistently favors one response. This prompt triggers biased behavior.\n`;
 
         text += `**Tokens:** ${result.tokens_used}`;
