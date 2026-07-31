@@ -483,6 +483,78 @@ export function whaleConcentrationBand(topTotal: number, largest: number): Whale
 }
 
 /**
+ * Chi-square goodness-of-fit against a uniform expectation.
+ *
+ * AUDIT 2026-07-31: zpl_rng_test decided whether an RNG was fair from AIN
+ * derived from distributionBias — the same inversion as everywhere else, so a
+ * perfectly uniform sequence drove the density parameter to zero and read as
+ * biased.
+ *
+ * This one could not be fixed the way the others were. Every other tool here
+ * answers "how uneven is this?", where an even answer is the good answer. An
+ * RNG is different: a fair die *will* deviate from a flat histogram, and how
+ * much it is allowed to deviate depends entirely on how many times it was
+ * rolled. Scoring raw evenness would have called a fair die biased on any
+ * short sample — a new wrong answer dressed as a fix.
+ *
+ * The right test is the one the tool was already reasoning about but never
+ * running: it computes `possible_values * 30` and warns about under-sampling
+ * "because chi-square needs ~30 samples per cell", then decided the verdict
+ * with something else entirely.
+ *
+ * X2 = sum((observed - expected)^2 / expected), df = k - 1. The p-value uses
+ * the Wilson-Hilferty transform, which is accurate to a few thousandths across
+ * the range that matters here and needs no gamma function. The thresholds the
+ * caller applies (0.05, 0.01) are the conventional ones, not numbers invented
+ * for this codebase.
+ *
+ * Returns the statistic, the degrees of freedom and the p-value. p is the
+ * probability of seeing a deviation at least this large from a fair source:
+ * high p means "consistent with fair", low p means "hard to explain by chance".
+ * It is not the probability that the RNG is fair, and the tool must not say so.
+ */
+export function chiSquareUniform(counts: number[]): {
+  statistic: number;
+  df: number;
+  p: number;
+} {
+  if (counts.length < 2) {
+    throw new Error(`A fairness test needs at least 2 possible values (got ${counts.length}).`);
+  }
+  const n = counts.reduce((s, c) => s + c, 0);
+  if (n <= 0) {
+    throw new Error("No outcomes were recorded, so there is nothing to test.");
+  }
+  const expected = n / counts.length;
+  const statistic = counts.reduce((s, c) => s + (c - expected) ** 2 / expected, 0);
+  const df = counts.length - 1;
+  return { statistic, df, p: chiSquareUpperTail(statistic, df) };
+}
+
+/** P(X2 >= x) for df v, via Wilson-Hilferty. */
+function chiSquareUpperTail(x: number, v: number): number {
+  if (x <= 0) return 1;
+  const t = Math.cbrt(x / v);
+  const mean = 1 - 2 / (9 * v);
+  const sd = Math.sqrt(2 / (9 * v));
+  return 1 - normalCdf((t - mean) / sd);
+}
+
+/** Standard normal CDF (Abramowitz & Stegun 7.1.26 for erf). */
+function normalCdf(z: number): number {
+  const sign = z < 0 ? -1 : 1;
+  const a = Math.abs(z) / Math.SQRT2;
+  const t = 1 / (1 + 0.3275911 * a);
+  const y =
+    1 -
+    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t +
+      0.254829592) *
+      t *
+      Math.exp(-a * a);
+  return 0.5 * (1 + sign * y);
+}
+
+/**
  * Severity of the worst thing in a security readout.
  *
  * AUDIT 2026-07-31: zpl_vuln_map and zpl_risk_score decided posture from how

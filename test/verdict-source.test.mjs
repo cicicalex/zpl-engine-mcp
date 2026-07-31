@@ -74,7 +74,8 @@ const KNOWN_INVERTED = [
   // finance.ts:zpl_portfolio converted 2026-07-31 — measured 25/25/25/25 at
   // AIN 0.00 "heavily skewed" and 97/1/1/1 at AIN 43.70 "some concentration
   // risk"; now 100.0 and 4.0 diversification respectively.
-  "gaming.ts:zpl_rng_test",
+  // gaming.ts:zpl_rng_test converted 2026-07-31 - needed a chi-square test,
+  // not a fairness score; a fair die is allowed to deviate. See chi-square.test.mjs.
   // security.ts:zpl_vuln_map and zpl_risk_score converted 2026-07-31 - posture
   // now comes from the worst finding, using the thresholds those tools already
   // printed per row.

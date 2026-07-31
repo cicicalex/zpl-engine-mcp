@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import type { Server } from "./helpers.js";
-import { distributionBias, concentrationBias, clampD, ZPL_DISCLAIMER, distributionFairness } from "./helpers.js";
+import { distributionBias, concentrationBias, clampD, ZPL_DISCLAIMER, distributionFairness , chiSquareUniform } from "./helpers.js";
 import { ZPLEngineClient } from "../engine-client.js";
 import { addHistory } from "../store.js";
 import { ainScale, fmtAin } from "../ain-format.js";
@@ -309,8 +309,25 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
         const result = await client.compute({ d, bias, samples: 3000 });
         const ain = ainScale(result.ain);
 
+        // AUDIT 2026-07-31: the verdict came from AIN derived from
+        // distributionBias, so a perfectly uniform sequence collapsed the
+        // engine reading and was reported as biased — the same inversion as the
+        // other tools converted today.
+        //
+        // This one could not be fixed the same way. Everywhere else, an even
+        // distribution is the good answer. A fair die is different: it *will*
+        // deviate from a flat histogram, and how much it may deviate depends
+        // on how many times it was rolled. Scoring raw evenness would have
+        // called a fair die biased on any short sample.
+        //
+        // So the verdict now runs the test this tool was already reasoning
+        // about: it computes possible_values * 30 above and warns about
+        // under-sampling because "chi-square needs ~30 samples per cell", then
+        // decided the verdict with something else. See chiSquareUniform.
+        const chi = chiSquareUniform(counts);
         const expected = outcomes.length / possible_values;
-        let text = `## RNG Fairness Test — AIN ${fmtAin(ain)}/100\n\n`;
+        let text = `## RNG Fairness Test — p = ${chi.p < 0.0001 ? "<0.0001" : chi.p.toFixed(4)}\n\n`;
+        text += `**Engine AIN:** ${fmtAin(ain)}/100 — the engine's own reading, not the fairness test.\n\n`;
 
         if (insufficientSamples) {
           text += `> ⚠️  **Insufficient sample size for reliable test.** ` +
@@ -328,15 +345,21 @@ export function registerGamingTools(server: Server, getClient: () => ZPLEngineCl
           text += `| ${i + 1} | ${counts[i]} | ${expected.toFixed(0)} | ${Number(dev) > 0 ? "+" : ""}${dev}% |\n`;
         }
 
+        text += `\n**Chi-square:** ${chi.statistic.toFixed(2)} on ${chi.df} degrees of freedom\n`;
+
         if (insufficientSamples) {
           text += `\n**Verdict:** Inconclusive due to under-sampling. Collect at least ${minRecommended} outcomes before drawing conclusions.\n`;
-        } else if (ain >= 70) {
-          text += `\n**Verdict:** RNG appears fair. Distribution matches expected uniform.\n`;
-        } else if (ain >= 40) {
-          text += `\n**Verdict:** Slight bias detected. Some values appear more than expected. Collect more samples to confirm.\n`;
+        } else if (chi.p >= 0.05) {
+          text += `\n**Verdict:** No evidence of bias. This much deviation from uniform is ordinary for ${outcomes.length} draws.\n`;
+        } else if (chi.p >= 0.01) {
+          text += `\n**Verdict:** Some evidence of bias (p < 0.05). Worth collecting more samples before concluding.\n`;
         } else {
-          text += `\n**Verdict:** Significant bias. RNG is NOT producing fair results. Check implementation.\n`;
+          text += `\n**Verdict:** Significant bias (p < 0.01). This deviation is hard to explain by chance. Check the implementation.\n`;
         }
+        // p is the probability of a deviation this large from a fair source. It
+        // is not the probability that the RNG is fair, and an audit tool that
+        // blurs the two invites someone to state the wrong one in public.
+        text += `\n*p is the chance a fair source would deviate at least this much. A high p does not prove fairness.*\n`;
 
         text += `**Tokens:** ${result.tokens_used}\n\n${ZPL_DISCLAIMER}`;
         addHistory({ tool: "zpl_rng_test", domain: "game", results: { possible_values, sample_size: outcomes.length, insufficientSamples, tokens_used: result.tokens_used }, ain_scores: { rng: ain } });
