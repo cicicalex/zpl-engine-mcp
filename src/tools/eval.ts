@@ -184,7 +184,11 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         text += `\n${ZPL_DISCLAIMER}\n`;
 
         // sessionClaudeCalls charged up front in checkClaudeCallBudget.
-        addHistory({ tool: "zpl_consistency_test", results: { prompt: prompt.slice(0, 80), runs, groups }, ain_scores: { consistency: ain } });
+        // AUDIT 2026-07-31: tokens_used was missing here, so estimateOpTokens fell
+        // back to 5 for a call that costs token_cost(d) - up to 500 at the
+        // input maximum. It is the engine's figure, not the printed total,
+        // which also counts Claude tokens the ZPL quota does not cover.
+        addHistory({ tool: "zpl_consistency_test", results: { prompt: prompt.slice(0, 80), runs, groups, tokens_used: result.tokens_used }, ain_scores: { consistency: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -260,7 +264,7 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         text += `\n${ZPL_DISCLAIMER}\n`;
 
         // sessionClaudeCalls charged up front in checkClaudeCallBudget.
-        addHistory({ tool: "zpl_sycophancy_score", results: { claim: claim.slice(0, 80), agree, disagree, nuanced }, ain_scores: { sycophancy: ain } });
+        addHistory({ tool: "zpl_sycophancy_score", results: { claim: claim.slice(0, 80), agree, disagree, nuanced, tokens_used: result.tokens_used }, ain_scores: { sycophancy: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -360,7 +364,7 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         text += `\n${ZPL_DISCLAIMER}\n`;
 
         // sessionClaudeCalls charged up front in checkClaudeCallBudget.
-        addHistory({ tool: "zpl_refusal_balance", results: { total: prompts.length, answered: totalAnswered, refused: totalRefused }, ain_scores: { refusal: ain } });
+        addHistory({ tool: "zpl_refusal_balance", results: { total: prompts.length, answered: totalAnswered, refused: totalRefused, tokens_used: result.tokens_used }, ain_scores: { refusal: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -446,7 +450,7 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         text += `\n${ZPL_DISCLAIMER}\n`;
 
         // sessionClaudeCalls charged up front in checkClaudeCallBudget.
-        addHistory({ tool: "zpl_language_equity", results: { prompt: prompt_en.slice(0, 80), languages, lengths }, ain_scores: { language_equity: ain } });
+        addHistory({ tool: "zpl_language_equity", results: { prompt: prompt_en.slice(0, 80), languages, lengths, tokens_used: result.tokens_used }, ain_scores: { language_equity: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -520,7 +524,7 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         text += `\n${ZPL_DISCLAIMER}\n`;
 
         // sessionClaudeCalls charged up front in checkClaudeCallBudget.
-        addHistory({ tool: "zpl_persona_drift", results: { persona: persona.slice(0, 80), inCharacter, broke }, ain_scores: { persona: ain } });
+        addHistory({ tool: "zpl_persona_drift", results: { persona: persona.slice(0, 80), inCharacter, broke, tokens_used: result.tokens_used }, ain_scores: { persona: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -592,7 +596,7 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         text += `\n${ZPL_DISCLAIMER}\n`;
 
         // sessionClaudeCalls charged up front in checkClaudeCallBudget.
-        addHistory({ tool: "zpl_safety_boundary", results: { total: escalation_prompts.length, fullAnswers, warned, refused, transitions }, ain_scores: { safety: ain } });
+        addHistory({ tool: "zpl_safety_boundary", results: { total: escalation_prompts.length, fullAnswers, warned, refused, transitions, tokens_used: result.tokens_used }, ain_scores: { safety: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -679,7 +683,7 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         text += `\n${ZPL_DISCLAIMER}\n`;
 
         // sessionClaudeCalls charged up front in checkClaudeCallBudget.
-        addHistory({ tool: "zpl_hallucination_consistency", results: { questions: questions.length, consistent, inconsistent }, ain_scores: { hallucination: ain } });
+        addHistory({ tool: "zpl_hallucination_consistency", results: { questions: questions.length, consistent, inconsistent, tokens_used: result.tokens_used }, ain_scores: { hallucination: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -743,7 +747,7 @@ export function registerEvalTools(server: Server, getClient: () => ZPLEngineClie
         text += `\n${ZPL_DISCLAIMER}\n`;
 
         // sessionClaudeCalls charged up front in checkClaudeCallBudget.
-        addHistory({ tool: "zpl_emotional_stability", results: { messages: conversation.length, mean: +mean.toFixed(3), stddev: +stddev.toFixed(3) }, ain_scores: { emotional: ain } });
+        addHistory({ tool: "zpl_emotional_stability", results: { messages: conversation.length, mean: +mean.toFixed(3), stddev: +stddev.toFixed(3), tokens_used: result.tokens_used }, ain_scores: { emotional: ain } });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
