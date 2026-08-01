@@ -36,9 +36,57 @@ export const financeLens: DomainLens = {
   },
 
   buildParams(input: Record<string, unknown>): { d: number; bias: number; samples?: number } {
-    const assets = input.assets as number[];
-    if (!assets || !Array.isArray(assets) || assets.length < 2) {
+    const raw = input.assets;
+    if (!raw || !Array.isArray(raw) || raw.length < 2) {
       throw new Error("Finance lens requires at least 2 asset price changes in 'assets' array");
+    }
+
+    // AUDIT 2026-08-01: this cast `input.assets as number[]` and trusted it.
+    //
+    // `zpl_report` takes a free-form `input` object, so nothing validates the
+    // shape before it arrives here — and `zpl_market_scan`, the other finance
+    // tool, spells the same key as an array of OBJECTS: [{symbol, change}].
+    // Handing zpl_report the shape its sibling documents made
+    // `assets.filter(a => a > 0)` count nothing and
+    // `assets.reduce((s, a) => s + Math.abs(a))` produce NaN, so bias came out
+    // NaN, went to the engine unchecked, and returned
+    // "Engine error 422: Unprocessable Entity". No mention of assets, of the
+    // shape, or of which of the two spellings this tool wanted.
+    //
+    // Found by calling every registered tool against the live engine rather
+    // than by reading — nothing in the type system objects to a cast.
+    //
+    // Both spellings are now accepted, since a caller who has just used
+    // zpl_market_scan has every reason to expect the same shape to work. A
+    // number is the change; an object contributes its `change` (or `value`).
+    // Anything else is named in the error rather than silently becoming NaN.
+    const assets: number[] = [];
+    const rejected: string[] = [];
+    for (const entry of raw) {
+      if (typeof entry === "number" && Number.isFinite(entry)) {
+        assets.push(entry);
+        continue;
+      }
+      if (entry && typeof entry === "object") {
+        const obj = entry as Record<string, unknown>;
+        const change = typeof obj.change === "number" ? obj.change
+          : typeof obj.value === "number" ? obj.value
+          : undefined;
+        if (change !== undefined && Number.isFinite(change)) {
+          assets.push(change);
+          continue;
+        }
+      }
+      rejected.push(JSON.stringify(entry)?.slice(0, 40) ?? String(entry));
+    }
+
+    if (assets.length < 2) {
+      throw new Error(
+        `Finance lens needs at least 2 usable asset price changes; ${rejected.length} entr` +
+          `${rejected.length === 1 ? "y was" : "ies were"} not a number and carried no numeric ` +
+          `"change" or "value" field: ${rejected.slice(0, 3).join(", ")}. Pass either ` +
+          `[1.2, -0.8] or [{"symbol":"AAA","change":1.2}] — the same shape zpl_market_scan takes.`,
+      );
     }
 
     // Dimension = number of assets (clamped 3-100)
