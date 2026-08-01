@@ -245,6 +245,32 @@ export async function parseEngineError(res: Response): Promise<string> {
   }
 }
 
+/**
+ * How long to wait for each engine route, in milliseconds.
+ *
+ * AUDIT 2026-08-01: every deadline here used to sit BELOW the engine's own
+ * ceiling for the same route - compute 15s against 30s, sweep 30s against 60s.
+ * That ordering is the expensive way round. The engine deducts tokens before it
+ * starts computing and refunds only when its own timeout or blocking task
+ * fails; a client that gives up first leaves the request future to be dropped
+ * on disconnect, with the deduction committed and no refund path reached.
+ *
+ * Measured: a sweep at d=48 with samples=50000 takes about 52 seconds
+ * server-side - past the old 30s abort, inside the engine's 60s ceiling. Each
+ * abandoned attempt cost 19 x 150 = 2850 tokens and returned nothing.
+ *
+ * Waiting past the engine turns that into a 504 the engine itself issues, which
+ * does refund. Values are the engine's ceiling plus headroom for the network,
+ * not round numbers - if the engine's ceilings move these have to move with
+ * them, which is what the guard checks.
+ */
+const ENGINE_COMPUTE_CEILING_MS = 30_000;
+const ENGINE_SWEEP_CEILING_MS = 60_000;
+const NETWORK_HEADROOM_MS = 5_000;
+
+const DEADLINE_COMPUTE_MS = ENGINE_COMPUTE_CEILING_MS + NETWORK_HEADROOM_MS;
+const DEADLINE_SWEEP_MS = ENGINE_SWEEP_CEILING_MS + NETWORK_HEADROOM_MS;
+
 export class ZPLEngineClient {
   private baseUrl: string;
   private apiKey: string;
@@ -294,6 +320,19 @@ export class ZPLEngineClient {
         if (msg.includes("401") || msg.includes("403") || msg.includes("400") || msg.includes("422")) {
           throw lastError;
         }
+        // AUDIT 2026-08-01: an aborted request is terminal too, and it was the
+        // most expensive thing this loop could retry. The engine has already
+        // charged for the call by the time the deadline fires, so re-sending
+        // charges again for work that may still be running on the other side.
+        // One user call became three billed ones.
+        //
+        // Matched on the abort's own shape rather than a status code, because
+        // AbortSignal.timeout produces a DOMException with name "TimeoutError"
+        // and no status at all - which is exactly why the 4xx check above let
+        // it through.
+        if (lastError.name === "TimeoutError" || lastError.name === "AbortError") {
+          throw lastError;
+        }
         if (attempt < this.maxRetries) {
           const delay = Math.min(1000 * 2 ** attempt, 4000);
           await new Promise(r => setTimeout(r, delay));
@@ -317,7 +356,7 @@ export class ZPLEngineClient {
           samples: req.samples ?? 1000,
         }),
         redirect: "error",
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(DEADLINE_COMPUTE_MS),
       });
 
       if (!res.ok) {
@@ -349,7 +388,7 @@ export class ZPLEngineClient {
         headers: this.headers(),
         body: JSON.stringify({ matrix }),
         redirect: "error",
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(DEADLINE_COMPUTE_MS),
       });
 
       if (!res.ok) {
@@ -371,7 +410,7 @@ export class ZPLEngineClient {
       const res = await fetch(`${this.baseUrl}/sweep?${params}`, {
         headers: this.headers(),
         redirect: "error",
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(DEADLINE_SWEEP_MS),
       });
 
       if (!res.ok) {
