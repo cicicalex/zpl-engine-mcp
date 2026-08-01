@@ -74,6 +74,39 @@ test("package.json carries a real semver version and a name", () => {
   assert.ok(NAME, "package.json has no name");
 });
 
+/**
+ * Version-shaped tokens in prose.
+ *
+ * Two forms count: three components (1.1.6), or a `v` prefix on two (v4.1).
+ * Both are what actually went stale — this package's npm description ended with
+ * "v4.1 adds HTTP_PROXY..." while publishing 4.3.0. A bare two-component number
+ * is left alone so ordinary prose does not read as a release, and runs of four
+ * or more components are addresses rather than versions.
+ */
+function versionTokens(text) {
+  const out = [];
+  for (const m of text.matchAll(/(v?)(\d+(?:\.\d+)+)/gi)) {
+    const parts = m[2].split(".");
+    if (parts.length > 3) continue;
+    if (parts.length === 3 || (parts.length === 2 && m[1])) out.push(m[2]);
+  }
+  return out;
+}
+
+test("the npm description does not advertise a different version", () => {
+  const desc = pkg.description ?? "";
+  assert.ok(desc.length > 0, "package.json has no description — npm would show the package with none");
+
+  const wrong = versionTokens(desc).filter((v) => v !== VERSION);
+  assert.deepEqual(
+    wrong,
+    [],
+    `the npm description names ${wrong.join(", ")} while this package publishes as ${VERSION}. ` +
+      `npm renders this on the package page and in search results and it cannot be edited without ` +
+      `publishing again. Keep the description evergreen and put release notes in CHANGELOG.md.`,
+  );
+});
+
 test("the registry manifest advertises the version that is being published", async () => {
   const server = await readJson("server.json");
 
