@@ -7,8 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.3.0] — 2026-07-31
 
-Note: 4.2.0 and 4.2.1 shipped without changelog entries. They are not
-reconstructed here — this entry covers 4.2.1 → 4.3.0 only.
+Note: this entry covers 4.2.1 → 4.3.0 only. The gap below it is wider than
+this note used to claim — seven version numbers went by without entries, 4.1.5
+through 4.2.1, not two. What can and cannot be recovered for each is set out
+in the two sections that follow.
 
 ### Added
 - `zpl_matrix` — analyse a specific binary matrix you supply, via the engine's
@@ -51,6 +53,59 @@ reconstructed here — this entry covers 4.2.1 → 4.3.0 only.
   leaving Enterprise and Enterprise XL customers with no line for their range.
 - `zpl_rng_test`'s `possible_values` is bounded to 100 and a clamped dimension
   is disclosed rather than applied silently.
+
+## [4.2.1] — 2026-05-19
+
+Written on 2026-08-01 from this repository's git history, which is all there is
+to work from. `31be14b` — dated 2026-05-19, tagged `v4.2.1` — is the root
+commit: it imports the entire tree in one go, already at `package.json` 4.2.1,
+with this changelog's newest entry at 4.1.4. There is no diff for any earlier
+release in this clone to read.
+
+### Changed
+
+- `server.json` raised to 4.2.1 so the MCP registry manifest matched
+  `package.json` before publishing. That is what the root commit's message says
+  it was for, and it is the only change this repository records for 4.2.1.
+
+### Not recovered
+
+- The root commit's message names a companion commit, `ccf3468`, and describes
+  it as a "legal name scrub + package.json bump". That object does not exist
+  here (`git cat-file -t ccf3468` → "Not a valid object name"), so what the
+  scrub covered cannot be checked. It is left unwritten rather than guessed at.
+
+## [4.1.5] – [4.2.0] — no release notes; not reconstructed
+
+4.1.5, 4.1.6, 4.1.7, 4.1.8, 4.1.9 and 4.2.0 have no changelog entry. This
+repository holds no commit from that period — history begins at 4.2.1 above —
+so there is no commit to reconstruct them from, and nothing is written here as
+if there were. The six numbers fall between the 4.1.4 entry below (2026-05-12)
+and that root commit (2026-05-19). Which of the six actually reached npm is
+not recorded here either, so it is not claimed.
+
+Three of the six left a dated, version-tagged note in the shipped source. A
+comment is a trace of a release, not a record of one, so it is quoted with its
+location and nothing is inferred past what it says:
+
+- **4.1.5** — `src/setup.ts:751`: the setup wizard pings
+  `/api/auth/cli/heartbeat` after pairing, so an install can be counted as
+  paired separately from having made a `/compute` call. Fire-and-forget.
+- **4.1.7** — `src/config.ts:89`, marked "audit 2026-05-13": API-key
+  precedence aligned with the CLI, so `ZPL_API_KEY` now wins over
+  `~/.zpl/config.toml`. The MCP previously resolved these the other way round,
+  which meant the two tools on one machine could talk to different accounts.
+- **4.1.8** — `src/setup.ts:490` and `src/setup.ts:937`, marked "AUDIT
+  2026-05-14": the client configs the wizard writes pin
+  `zpl-engine-mcp@latest`, so an npx cache cannot pin a user to an old build.
+
+4.1.6, 4.1.9 and 4.2.0 left no trace in this repository at all, and nothing is
+claimed for them.
+
+If those commits surface in another clone, reconstruct these entries from the
+diffs. Do not fill this section in from memory, from the npm listing, or from
+the registry — a changelog that guesses is worse than one that admits a gap,
+because the next reader cannot tell which entries were measured.
 
 ## [4.1.4] — 2026-05-12
 

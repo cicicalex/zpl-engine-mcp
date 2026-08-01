@@ -210,11 +210,37 @@ Add to your MCP configuration following the respective IDE's documentation, with
 
 ## Tool Categories (69 tools)
 
-Unique tool names: 63. With 4 backwards-compat aliases (`zpl_balance_*` pairs) the registered total is 67.
+<!--
+  AUDIT 2026-08-01 — what was wrong here.
+
+  This line read "Unique tool names: 63. With 4 backwards-compat aliases
+  (`zpl_balance_*` pairs) the registered total is 67." Both halves were stale.
+  src/tool-count.ts is the single declaration (69 registered, 4 aliases, 65
+  unique) and test/tool-count.test.mjs re-counts every `server.tool(...)` call
+  in src/ against it, so 69/65 is measured, not typed. The heading one line
+  above already said 69 — the file contradicted itself across two adjacent
+  lines.
+
+  The table underneath was the source of the 67: its rows summed to 67 because
+  Core was missing `zpl_matrix` (added in 4.3.0) and Meta was missing
+  `zpl_diagnose` — both registered, and both already advertised higher up in
+  this same README. Rows corrected to 10 and 9; the eleven rows now sum to 69.
+
+  Why it survived the guard: tool-count.test.mjs scans published surfaces for
+  four shapes — `**<n> tools**`, `<n> tools across`, `Tool Categories (<n>
+  tools)` and `<n> unique`. "Unique tool names: 63" puts the number after the
+  word, and "the registered total is 67" matches nothing at all, so the guard
+  read straight past both. The replacement is deliberately phrased in the
+  guarded shapes ("69 tools across", "65 unique"), so the next drift fails a
+  test instead of shipping to npm. If you rewrite this sentence, keep those two
+  phrasings intact or the number goes unchecked again.
+-->
+
+69 tools across 11 categories: 65 unique names plus 4 backwards-compat aliases (the `zpl_balance_*` pairs, which reuse another tool's handler). Every row below is a live registration, so the table adds up to the same 69.
 
 | Category | Tools | Examples |
 |----------|-------|---------|
-| **Core** | 9 | `zpl_compute`, `zpl_sweep`, `zpl_analyze`, `zpl_domains`, `zpl_health`, `zpl_plans`, `zpl_history`, `zpl_watchlist`, `zpl_report` |
+| **Core** | 10 | `zpl_compute`, `zpl_sweep`, `zpl_matrix`, `zpl_analyze`, `zpl_domains`, `zpl_health`, `zpl_plans`, `zpl_history`, `zpl_watchlist`, `zpl_report` |
 | **Finance** | 7 | `zpl_market_scan`, `zpl_portfolio`, `zpl_fear_greed`, `zpl_forex_pair`, `zpl_sector_bias`, `zpl_macro`, `zpl_correlation` |
 | **Gaming** | 6 | `zpl_loot_table`, `zpl_matchmaking`, `zpl_economy_check`, `zpl_pvp_balance`, `zpl_gacha_audit`, `zpl_rng_test` |
 | **AI/ML** | 4 | `zpl_model_bias`, `zpl_dataset_audit`, `zpl_prompt_test`, `zpl_benchmark` |
@@ -223,7 +249,7 @@ Unique tool names: 63. With 4 backwards-compat aliases (`zpl_balance_*` pairs) t
 | **Certification** | 3 | `zpl_debate`, `zpl_news_bias`, `zpl_review_bias` |
 | **Advanced** | 7 | `zpl_simulate`, `zpl_leaderboard`, `zpl_chart`, `zpl_teach`, `zpl_alert`, `zpl_versus` (+ alias `zpl_balance_compare`) |
 | **Universal** | 8 | `zpl_check_response`, `zpl_explain`, `zpl_decide` (+ alias `zpl_balance_check`), `zpl_compare` (+ alias `zpl_balance_pair`), `zpl_rank` (+ alias `zpl_balance_rank`) |
-| **Meta** | 8 | `zpl_about`, `zpl_quota`, `zpl_score_only`, `zpl_validate_input`, `zpl_batch`, `zpl_export`, `zpl_usage`, `zpl_account` |
+| **Meta** | 9 | `zpl_about`, `zpl_quota`, `zpl_score_only`, `zpl_diagnose`, `zpl_validate_input`, `zpl_batch`, `zpl_export`, `zpl_usage`, `zpl_account` |
 | **AI Eval** | 8 | `zpl_consistency_test`, `zpl_sycophancy_score`, `zpl_refusal_balance`, `zpl_language_equity`, `zpl_persona_drift`, `zpl_safety_boundary`, `zpl_hallucination_consistency`, `zpl_emotional_stability` |
 
 ### New in v3.2: Meta tools

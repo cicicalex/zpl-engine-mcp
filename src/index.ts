@@ -920,7 +920,15 @@ async function main() {
     process.exit(1);
   }
 
-  // v3.6.0: resolve API key from ~/.zpl/config.toml first, env var second.
+  // Resolve the API key: env var first, ~/.zpl/config.toml as the fallback.
+  //
+  // AUDIT 2026-08-01: this line read "v3.6.0: resolve API key from
+  // ~/.zpl/config.toml first, env var second", which was the v3.6.0 order and
+  // has been wrong since v4.1.7. That release flipped the precedence so the
+  // MCP and the CLI resolve keys identically (env wins), and loadApiKey() in
+  // src/config.ts has done env-first ever since — only this comment was left
+  // behind. Read against loadApiKey itself, not assumed: it returns
+  // { source: "env" } before it ever opens the config file.
   const loaded = await loadApiKey();
   API_KEY = loaded.key;
 
@@ -929,6 +937,19 @@ async function main() {
     // (~1300 npm downloads, only a fraction have accounts yet) so spell out
     // the create-account step explicitly — the wizard handles all of it.
     // All writes go to stderr — stdout is reserved for the MCP JSON-RPC stream.
+    //
+    // AUDIT 2026-08-01: the Docs line pointed at
+    // https://zeropointlogic.io/docs/mcp-setup, which the site does not serve.
+    // src/app/docs/ contains exactly three routes — /docs, /docs/mcp and
+    // /docs/sdks — and next.config.ts declares no redirect that would cover
+    // /docs/mcp-setup, so it renders the not-found page. This box is printed in
+    // the one state every install passes through (no key yet), so the single
+    // link we give a brand-new user at their most confused moment was a 404.
+    // Repointed at /docs/mcp, which is the MCP install page: it carries the
+    // per-client config snippets (Claude Desktop, Claude Code, Cursor/VS Code)
+    // that a reader of this box is looking for. Verified against the site tree
+    // rather than guessed — do not "tidy" it to a path that reads better
+    // without checking src/app/docs/ again.
     console.error("");
     console.error(`┌──────────────────────────────────────────────────────────────┐`);
     console.error(`│  ZPL MCP v${getMcpPackageVersion().padEnd(8)} — first-time setup                      │`);
@@ -944,7 +965,7 @@ async function main() {
     console.error(`│    3. Your API key flows back — no copy-paste               │`);
     console.error(`│                                                              │`);
     console.error(`│  Free plan: 5,000 tokens/month.                              │`);
-    console.error(`│  Docs: https://zeropointlogic.io/docs/mcp-setup             │`);
+    console.error(`│  Docs: https://zeropointlogic.io/docs/mcp                    │`);
     console.error(`│                                                              │`);
     console.error(`│  Then restart Claude Desktop / Cursor to pick up the key.   │`);
     console.error(`│                                                              │`);
