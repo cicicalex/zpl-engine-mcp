@@ -26,6 +26,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readSibling, whySkipped } from "./sibling-repo.mjs";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -70,13 +71,15 @@ test("a changed dimension is disclosed, an unchanged one is not", () => {
   }
 });
 
-test("the website's bounds match", async () => {
-  const src = await readFile(
-    "C:/Dev/ZPL-Private/zpl-nodeweb/src/lib/constants.ts",
-    "utf-8",
-  ).catch(() => null);
+const SITE_CONSTANTS = ["src", "lib", "constants.ts"];
+
+test("the website's bounds match", async (t) => {
+  // AUDIT 2026-08-02: the path was absolute on one machine and absence returned
+  // early, which the runner counts as a pass. Resolved by environment or
+  // relative layout now, and absence is reported as a skip.
+  const src = await readSibling("site", ...SITE_CONSTANTS);
   if (src === null) {
-    // The website repo is not always checked out beside this one.
+    t.skip(whySkipped("site", ...SITE_CONSTANTS));
     return;
   }
   const min = Number(src.match(/MIN_DIMENSION\s*=\s*(\d+)/)[1]);

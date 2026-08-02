@@ -27,9 +27,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { ainSignal } from "../dist/tools/helpers.js";
+import { readSibling, whySkipped } from "./sibling-repo.mjs";
 
-/** The engine's own bands, from crates/zpl-core/src/ain.rs. */
-const ENGINE_AIN_RS = "C:/Proiecte/zpl-engine-source/crates/zpl-core/src/ain.rs";
+/** The engine's own bands live here, in the engine repo. */
+const AIN_RS = ["crates", "zpl-core", "src", "ain.rs"];
 
 const ENGINE_BANDS = [
   [0.96, "CERTIFIED_NEUTRAL"],
@@ -91,14 +92,17 @@ test("no softer vocabulary survives anywhere in the package", async () => {
 
 /**
  * The copy above is only correct while the engine's is unchanged. Read the Rust
- * when it is checked out beside this repo; skip when it is not, so the suite
+ * when the engine repo is available; skip VISIBLY when it is not, so the suite
  * still runs for anyone with only the client packages.
+ *
+ * AUDIT 2026-08-02: this used to `return` on a missing file, which the runner
+ * counts as a pass. Measured by moving the engine's ain.rs aside: 6 passed, 0
+ * skipped, exit 0 — the check reported success without reading anything.
  */
-test("the pinned bands match the engine's source", async () => {
-  let rust;
-  try {
-    rust = await readFile(ENGINE_AIN_RS, "utf-8");
-  } catch {
+test("the pinned bands match the engine's source", async (t) => {
+  const rust = await readSibling("engine", ...AIN_RS);
+  if (rust === null) {
+    t.skip(whySkipped("engine", ...AIN_RS));
     return;
   }
   const fn = rust.slice(rust.indexOf("pub fn ain_status"));
