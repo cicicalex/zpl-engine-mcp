@@ -271,6 +271,9 @@ const NETWORK_HEADROOM_MS = 5_000;
 const DEADLINE_COMPUTE_MS = ENGINE_COMPUTE_CEILING_MS + NETWORK_HEADROOM_MS;
 const DEADLINE_SWEEP_MS = ENGINE_SWEEP_CEILING_MS + NETWORK_HEADROOM_MS;
 
+// A plan catalogue lookup is a small read; it needs a bound, not a big one.
+const DEADLINE_CATALOGUE_MS = 10_000;
+
 export class ZPLEngineClient {
   private baseUrl: string;
   private apiKey: string;
@@ -307,8 +310,25 @@ export class ZPLEngineClient {
     };
   }
 
-  /** Retry with exponential backoff for transient failures (5xx, network) */
-  private async withRetry<T>(fn: () => Promise<T>, timeoutMs: number): Promise<T> {
+  /**
+   * Retry with exponential backoff for transient failures (5xx, network).
+   *
+   * AUDIT 2026-08-02: this used to take a second argument, `timeoutMs`, and
+   * never read it. Every call site passed one - 15000, 30000, 5000, 10000 -
+   * and the body used `fn`, `maxRetries` and the backoff delay, nothing else.
+   *
+   * The deadlines that do exist live on each fetch, as AbortSignal.timeout.
+   * Four of the five calls had one and were fine. `plans()` did not, and the
+   * argument beside it read exactly like the thing it was missing. Measured
+   * against a stub that accepts the connection and then says nothing:
+   * health() gave up after 5.0s, plans() was still waiting at 45s.
+   *
+   * So the parameter is gone rather than implemented. Adding a second deadline
+   * mechanism here would leave two places to read and two to keep in step with
+   * the engine's ceilings; removing it means the signature stops claiming a
+   * guarantee that the call sites are the ones actually making.
+   */
+  private async withRetry<T>(fn: () => Promise<T>): Promise<T> {
     let lastError: Error | undefined;
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
@@ -364,7 +384,7 @@ export class ZPLEngineClient {
       }
 
       return res.json() as Promise<ComputeResponse>;
-    }, 15000);
+    });
   }
 
   /**
@@ -396,7 +416,7 @@ export class ZPLEngineClient {
       }
 
       return res.json() as Promise<AnalyzeResponse>;
-    }, 15000);
+    });
   }
 
   async sweep(d: number, samples?: number): Promise<SweepResponse> {
@@ -418,7 +438,7 @@ export class ZPLEngineClient {
       }
 
       return res.json() as Promise<SweepResponse>;
-    }, 30000);
+    });
   }
 
   async health(): Promise<HealthResponse> {
@@ -429,7 +449,7 @@ export class ZPLEngineClient {
       });
       if (!res.ok) throw new Error(await parseEngineError(res));
       return res.json() as Promise<HealthResponse>;
-    }, 5000);
+    });
   }
 
   async plans(): Promise<PlanInfo[]> {
@@ -437,10 +457,11 @@ export class ZPLEngineClient {
       const res = await fetch(`${this.baseUrl}/plans`, {
         headers: this.headers(),
         redirect: "error",
+        signal: AbortSignal.timeout(DEADLINE_CATALOGUE_MS),
       });
       if (!res.ok) throw new Error(await parseEngineError(res));
       const data = await res.json() as { plans: PlanInfo[] };
       return data.plans;
-    }, 10000);
+    });
   }
 }
