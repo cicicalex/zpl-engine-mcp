@@ -81,7 +81,16 @@ const MAX_HISTORY = 500;
 export function sanitizeSecrets(input: string): string {
   return input
     .replace(/zpl_[us]_(?:[a-z]+_)?[a-f0-9]{20,}/gi, "[REDACTED]")
-    .replace(/Bearer [^\s"]+/gi, "Bearer [REDACTED]")
+    // AUDIT 2026-08-02: this required a literal space, so `Bearer<TAB><token>`
+    // passed straight through - measured against the CLI's set, which caught it.
+    // This sanitiser runs on engine error text that is handed back to the user,
+    // so what slips here is what they see.
+    // The `"` exclusion is load-bearing, not decoration: this runs over
+    // JSON.stringify(entry) and the result is parsed back. A pattern of
+    // `\S+` swallows the closing quote and everything after it, which an
+    // existing test caught immediately - "Unterminated string in JSON".
+    // Only the separator needed widening, from a literal space to \s+.
+    .replace(/Bearer\s+[^\s"]+/gi, "Bearer [REDACTED]")
     .replace(/gsk_[A-Za-z0-9_-]+/gi, "[REDACTED]")
     .replace(/sk-[A-Za-z0-9_-]+/gi, "[REDACTED]")
     .replace(/sk_(?:live|test)_[A-Za-z0-9_-]+/gi, "[REDACTED]");
