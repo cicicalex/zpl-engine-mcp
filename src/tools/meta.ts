@@ -37,6 +37,35 @@ const PLAN_INFO: Record<string, { price: string; annualPrice: string; maxD: numb
 // third statement in zpl_plans quietly claimed d²+d. A rule enforced by a
 // comment holds exactly as long as everyone reads the comment.
 
+/**
+ * An engine message, fit to sit inside a markdown table cell.
+ *
+ * AUDIT 2026-08-02: this was `.slice(0, 30)` inline in zpl_batch, and every
+ * refusal the engine sends is longer than thirty characters. Measured through
+ * the shipped tool against a real engine:
+ *
+ *   "Dimension 16 exceeds plan limit of 9"
+ *     reached the customer as  "Engine error 403: Dimension 16"
+ *
+ *   "Token limit exceeded: 4998/5000 used this month"
+ *     reached the customer as  "You've hit your monthly ZPL En"
+ *
+ * Both cut exactly where the useful part starts, and the "Engine error 403: "
+ * prefix ate most of what was left. The customer learns that something was
+ * refused and not what their limit is or when it lifts — which is the entire
+ * content of those two messages.
+ *
+ * A pipe or a newline is what a table cell genuinely cannot carry, so those
+ * are neutralised rather than the message shortened. The cap is generous and
+ * exists only against a pathological body; every refusal the engine actually
+ * sends fits inside it whole.
+ */
+function cellSafe(message: string): string {
+  const oneLine = String(message ?? "").replace(/\s*[\r\n]+\s*/g, " ").replace(/\|/g, "/").trim();
+  if (oneLine === "") return "unknown error";
+  return oneLine.length > 200 ? `${oneLine.slice(0, 197)}...` : oneLine;
+}
+
 export function registerMetaTools(server: Server, getClient: () => ZPLEngineClient) {
 
   // --- zpl_about: project info, no auth needed ---
@@ -416,6 +445,7 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
         text += `|---|-------|---|------|-----|--------|--------|\n`;
 
         let totalTokens = 0;
+        let failed = 0;
         const scores: Record<string, number> = {};
 
         for (let i = 0; i < jobs.length; i++) {
@@ -431,13 +461,31 @@ export function registerMetaTools(server: Server, getClient: () => ZPLEngineClie
             scores[job.label] = ain;
             text += `| ${i + 1} | ${job.label} | ${job.d} | ${job.bias.toFixed(2)} | ${fmtAin(ain)}/100 | ${result.ain_status} | ${result.tokens_used} |\n`;
           } catch (err) {
-            text += `| ${i + 1} | ${job.label} | ${job.d} | ${job.bias.toFixed(2)} | ERROR | ${(err as Error).message.slice(0, 30)} | 0 |\n`;
+            failed += 1;
+            text += `| ${i + 1} | ${job.label} | ${job.d} | ${job.bias.toFixed(2)} | ERROR | ${cellSafe((err as Error).message)} | 0 |\n`;
           }
         }
 
         text += `\n**Total tokens:** ${totalTokens}`;
+
+        // AUDIT 2026-08-02: the summary said only how much was spent, and the
+        // result came back as a success however many jobs had been refused.
+        // Measured against a real engine, with an account near its ceiling:
+        // two of three jobs refused, isError absent, and the caller - usually
+        // another agent, not a person reading a table - had nothing to branch
+        // on.
+        if (failed > 0) {
+          text += `\n\n**${failed} of ${jobs.length} job(s) failed** - see the Status column. Failed jobs were not charged.`;
+        }
+
         addHistory({ tool: "zpl_batch", results: { job_count: jobs.length, tokens_used: totalTokens }, ain_scores: scores });
-        return { content: [{ type: "text" as const, text }] };
+        return {
+          content: [{ type: "text" as const, text }],
+          // Every job refused means nothing was computed, and that is an error.
+          // Some refused: the table plus the line above is the honest answer,
+          // and flagging the whole call would throw away the rows that worked.
+          ...(failed > 0 && failed === jobs.length ? { isError: true } : {}),
+        };
       } catch (err) {
         return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
       }

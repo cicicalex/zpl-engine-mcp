@@ -5,6 +5,21 @@ All notable changes to `zpl-engine-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- `zpl_batch` cut every failure message at 30 characters, which is shorter than
+  any refusal the engine sends. A customer over their plan saw
+  `Engine error 403: Dimension 16` instead of `... exceeds plan limit of 9`, and
+  a customer out of quota saw `You've hit your monthly ZPL En` instead of the
+  figures and the upgrade path. Measured through the shipped tool against a real
+  engine on the free plan; the messages now arrive whole.
+- `zpl_batch` returned a batch as a success however many of its jobs had been
+  refused. The caller is usually another agent, which had nothing to branch on.
+  A batch where every job was refused is now an error; a partly successful one
+  is not, so the rows that ran and were charged for are never discarded, and the
+  summary line says how many failed either way.
+
 ## [4.3.0] — 2026-07-31
 
 Note: this entry covers 4.2.1 → 4.3.0 only. The gap below it is wider than
