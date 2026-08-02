@@ -43,6 +43,15 @@ in the two sections that follow.
 - `zpl_vuln_map` and `zpl_risk_score` take their posture from the worst finding
   using the thresholds they already print per row, not from how evenly risk was
   spread. An all-critical system is no longer congratulated.
+- **A key preceded by `Bearer` and a tab was shown to the user in full.** The
+  redaction that runs over engine error text before it reaches the screen
+  required a literal space after `Bearer`, so a tab walked straight through it.
+  Found by running this sanitiser and the CLI's over one corpus: each leaked a
+  shape the other caught, and this is the half that leaked here. Real leaks of
+  full keys into user-visible errors are what this redaction was written for.
+- **`plans()` could wait forever.** It was given a deadline that never armed,
+  so an engine that accepted the connection and then said nothing left the
+  client hanging with no error and no timeout.
 
 ### Changed
 - One vocabulary for AIN across the whole package. `ainSignal`, the `zpl_teach`
